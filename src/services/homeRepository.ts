@@ -22,14 +22,14 @@ export interface RecentWorkout {
 
 export interface HomeSnapshot {
   weekStart: string;
-  weeklyGoal: number;
+  weeklyGoal: number | null;
   plans: PlannedWorkoutRow[];
   exerciseCountByPlan: Record<string, number>;
   sessionStatusByPlan: Record<string, WorkoutSessionRow['status']>;
   completedCount: number;
   activeMinutes: number;
-  setCount: number;
-  volumeKg: number;
+  totalExercises: number;
+  loggedSets: number;
   recent: RecentWorkout[];
 }
 
@@ -43,22 +43,31 @@ function assertNoError(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
 }
 
-function activeMinutesFor(
+function activeMillisecondsFor(
   sessionId: string,
   intervals: SessionIntervalRow[],
 ): number {
-  const milliseconds = intervals
+  return intervals
     .filter(
       (interval) => interval.session_id === sessionId && interval.ended_at,
     )
     .reduce(
       (sum, interval) =>
         sum +
-        (new Date(interval.ended_at as string).getTime() -
-          new Date(interval.started_at).getTime()),
+        Math.max(
+          0,
+          new Date(interval.ended_at as string).getTime() -
+            new Date(interval.started_at).getTime(),
+        ),
       0,
     );
-  return Math.round(Math.max(0, milliseconds) / 60_000);
+}
+
+function activeMinutesFor(
+  sessionId: string,
+  intervals: SessionIntervalRow[],
+): number {
+  return Math.round(activeMillisecondsFor(sessionId, intervals) / 60_000);
 }
 
 async function fetchHome(
@@ -69,30 +78,42 @@ async function fetchHome(
 
   const weekStart = dateKey(monday);
   const weekEnd = dateKey(addDays(monday, 7));
-  const [settingsResult, plansResult, recentResult] = await Promise.all([
-    supabase
-      .from('user_settings')
-      .select('weekly_goal')
-      .eq('user_id', accountId)
-      .maybeSingle(),
-    supabase
-      .from('planned_workouts')
-      .select('*')
-      .eq('user_id', accountId)
-      .gte('planned_date', weekStart)
-      .lt('planned_date', weekEnd)
-      .order('planned_date', { ascending: true }),
-    supabase
-      .from('workout_sessions')
-      .select('*')
-      .eq('user_id', accountId)
-      .in('status', ['completed', 'partial'])
-      .order('finished_at', { ascending: false })
-      .limit(3),
-  ]);
+  const [settingsResult, plansResult, recentResult, performedWeekResult] =
+    await Promise.all([
+      supabase
+        .from('user_settings')
+        .select('weekly_goal')
+        .eq('user_id', accountId)
+        .maybeSingle(),
+      supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', accountId)
+        .is('archived_at', null)
+        .gte('planned_date', weekStart)
+        .lt('planned_date', weekEnd)
+        .order('planned_date', { ascending: true }),
+      supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', accountId)
+        .is('archived_at', null)
+        .in('status', ['completed', 'partial'])
+        .order('finished_at', { ascending: false })
+        .limit(3),
+      supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', accountId)
+        .is('archived_at', null)
+        .in('status', ['completed', 'partial'])
+        .gte('finished_at', monday.toISOString())
+        .lt('finished_at', addDays(monday, 7).toISOString()),
+    ]);
   assertNoError(settingsResult.error);
   assertNoError(plansResult.error);
   assertNoError(recentResult.error);
+  assertNoError(performedWeekResult.error);
 
   const plans = (plansResult.data ?? []) as PlannedWorkoutRow[];
   const recentSessions = (recentResult.data ?? []) as WorkoutSessionRow[];
@@ -111,6 +132,7 @@ async function fetchHome(
             .from('workout_sessions')
             .select('*')
             .eq('user_id', accountId)
+            .is('archived_at', null)
             .in('planned_workout_id', planIds)
         : Promise.resolve({ data: [], error: null }),
       planIds.length
@@ -125,6 +147,7 @@ async function fetchHome(
             .from('planned_workouts')
             .select('id,name_snapshot,planned_date')
             .eq('user_id', accountId)
+            .is('archived_at', null)
             .in('id', missingRecentPlanIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
@@ -133,9 +156,8 @@ async function fetchHome(
   assertNoError(recentPlansResult.error);
 
   const weekSessions = (weekSessionsResult.data ?? []) as WorkoutSessionRow[];
-  const performedWeekSessions = weekSessions.filter(
-    (session) => session.status === 'completed' || session.status === 'partial',
-  );
+  const performedWeekSessions = (performedWeekResult.data ??
+    []) as WorkoutSessionRow[];
   const allSessionIds = [
     ...new Set([
       ...performedWeekSessions.map((session) => session.id),
@@ -188,8 +210,18 @@ async function fetchHome(
   const weekSessionIds = new Set(
     performedWeekSessions.map((session) => session.id),
   );
-  const weekSets = sets.filter((set) =>
-    weekSessionIds.has(sessionIdByExercise.get(set.session_exercise_id) ?? ''),
+  const weekSets = sets.filter(
+    (set) =>
+      weekSessionIds.has(
+        sessionIdByExercise.get(set.session_exercise_id) ?? '',
+      ) &&
+      set.actual_reps !== null &&
+      set.actual_weight_kg !== null,
+  );
+  const workingExerciseIds = new Set(
+    weekSets
+      .filter((set) => set.set_type === 'working')
+      .map((set) => set.session_exercise_id),
   );
   const recentPlansById = new Map(
     [...plans, ...(recentPlansResult.data ?? [])].map((plan) => [
@@ -200,7 +232,7 @@ async function fetchHome(
 
   return {
     weekStart,
-    weeklyGoal: settingsResult.data?.weekly_goal ?? 4,
+    weeklyGoal: settingsResult.data?.weekly_goal ?? null,
     plans,
     exerciseCountByPlan,
     sessionStatusByPlan: Object.fromEntries(
@@ -212,15 +244,14 @@ async function fetchHome(
     completedCount: performedWeekSessions.filter(
       (session) => session.status === 'completed',
     ).length,
-    activeMinutes: performedWeekSessions.reduce(
-      (sum, session) => sum + activeMinutesFor(session.id, intervals),
-      0,
+    activeMinutes: Math.round(
+      performedWeekSessions.reduce(
+        (sum, session) => sum + activeMillisecondsFor(session.id, intervals),
+        0,
+      ) / 60_000,
     ),
-    setCount: weekSets.filter((set) => set.actual_reps !== null).length,
-    volumeKg: weekSets.reduce(
-      (sum, set) => sum + (set.actual_reps ?? 0) * (set.actual_weight_kg ?? 0),
-      0,
-    ),
+    totalExercises: workingExerciseIds.size,
+    loggedSets: weekSets.length,
     recent: recentSessions.map((session) => ({
       session,
       name:

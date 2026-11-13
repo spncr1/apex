@@ -1,9 +1,10 @@
-import { Dumbbell } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, typography } from '../theme/tokens';
+import { AccountButton } from './AccountButton';
+import { ApexBrand } from './ApexBrand';
 
 export function ScreenFrame({
   eyebrow,
@@ -19,10 +20,8 @@ export function ScreenFrame({
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.brandRow}>
-          <Dumbbell size={27} color={colors.accent} strokeWidth={2.5} />
-          <Text style={styles.brand}>WORKOUT TRACKER</Text>
-        </View>
+        <ApexBrand />
+        <AccountButton style={styles.accountButton} />
         <View style={styles.eyebrowRow}>
           <View style={styles.eyebrowMark} />
           <Text style={styles.eyebrow}>{eyebrow}</Text>
@@ -37,18 +36,13 @@ export function ScreenFrame({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { width: '100%', padding: spacing.lg, paddingBottom: 120 },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xxl,
+  content: {
+    width: '100%',
+    padding: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: 120,
   },
-  brand: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: 18,
-  },
+  accountButton: { right: spacing.lg },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrowMark: {
     width: 5,

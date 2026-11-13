@@ -40,11 +40,7 @@ export function formatDay(date: Date): string {
 }
 
 export function formatSessionDate(timestamp: string): string {
-  return new Intl.DateTimeFormat('en-AU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(timestamp));
+  return formatDay(new Date(timestamp));
 }
 
 export function greetingFor(date: Date): string {

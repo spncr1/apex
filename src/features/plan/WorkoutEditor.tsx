@@ -33,8 +33,8 @@ type DraftExercise = {
 
 function fromTarget(set: SetTargetInput): DraftSet {
   return {
-    reps: String(set.target_reps),
-    weight: String(set.target_weight_kg),
+    reps: set.target_reps === null ? '' : String(set.target_reps),
+    weight: set.target_weight_kg === null ? '' : String(set.target_weight_kg),
   };
 }
 
@@ -90,7 +90,7 @@ export function WorkoutEditor({
       {
         exercise_id: exercise.id,
         name: exercise.name,
-        sets: [{ reps: '8', weight: '0' }],
+        sets: [{ reps: '', weight: '' }],
       },
     ]);
     setPickerOpen(false);
@@ -111,18 +111,14 @@ export function WorkoutEditor({
     for (const exercise of exercises) {
       const sets: SetTargetInput[] = [];
       for (const set of exercise.sets) {
-        const reps = Number(set.reps);
-        const weight = Number(set.weight);
+        const reps = set.reps.trim() === '' ? null : Number(set.reps);
+        const weight = set.weight.trim() === '' ? null : Number(set.weight);
         if (
-          !set.reps.trim() ||
-          !set.weight.trim() ||
-          !Number.isInteger(reps) ||
-          reps < 0 ||
-          !Number.isFinite(weight) ||
-          weight < 0 ||
-          weight > 999999.99
+          (reps !== null && (!Number.isInteger(reps) || reps < 0)) ||
+          (weight !== null &&
+            (!Number.isFinite(weight) || weight < 0 || weight > 999999.99))
         ) {
-          setError('Use whole reps and a nonnegative weight for every set.');
+          setError('Use whole reps and a nonnegative weight when entered.');
           return;
         }
         sets.push({
@@ -298,7 +294,7 @@ export function WorkoutEditor({
                       item.exercise_id === exercise.exercise_id
                         ? {
                             ...item,
-                            sets: [...item.sets, { reps: '8', weight: '0' }],
+                            sets: [...item.sets, { reps: '', weight: '' }],
                           }
                         : item,
                     ),

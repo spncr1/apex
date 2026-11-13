@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountButton } from '../../components/AccountButton';
 import { getCachedRead, saveCachedRead } from '../sessions/sessionStore';
 import { supabase } from '../../services/supabase';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
@@ -320,6 +321,7 @@ export function MuscleGroupScreen({
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <AccountButton style={styles.accountButton} />
         <Pressable
           style={styles.back}
           onPress={() => router.back()}
@@ -612,6 +614,7 @@ export function MuscleGroupScreen({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', padding: spacing.lg, paddingBottom: 100 },
+  accountButton: { top: spacing.lg, right: spacing.lg },
   back: {
     flexDirection: 'row',
     alignItems: 'center',

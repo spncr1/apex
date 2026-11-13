@@ -6,6 +6,8 @@ These are requirements for later approved implementation milestones. They do not
 
 - Users plan workouts across the week. Scheduled workouts remain distinguishable from performed workouts.
 - Add Workout creates a workout directly for the selected date. The app has no workout templates or automatic recurrence.
+- Planned set reps and weight may be left blank; session logging captures the actual values.
+- The weekly workout goal stays unset until the user enters one.
 - Exercises within a workout are unordered. Drag-and-drop exercise ordering is not required.
 
 ## Workout sessions
@@ -17,6 +19,7 @@ These are requirements for later approved implementation milestones. They do not
 ## Exercise logging
 
 - New planned and logged sets are working sets. The app does not ask users to log warm-up sets.
+- Session set numbers are assigned automatically as sets are added.
 - Workout comments, persistent exercise notes, and individual set notes are separate.
 - Preserve historical workout data.
 

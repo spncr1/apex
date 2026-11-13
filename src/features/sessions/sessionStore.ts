@@ -273,6 +273,26 @@ export function getCachedSessionsForAccount(accountId: string) {
   });
 }
 
+export function forgetArchivedSession(accountId: string, sessionId: string) {
+  return serial(async () => {
+    const db = await database();
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        'delete from session_cache where account_id = ? and session_id = ?',
+        accountId,
+        sessionId,
+      );
+      await db.runAsync(
+        `delete from read_cache where account_id = ? and (
+           cache_key like 'planning:%' or cache_key like 'home:%'
+           or cache_key like 'progress:%' or cache_key like 'exercise-detail:%'
+         )`,
+        accountId,
+      );
+    });
+  });
+}
+
 export function cacheRemoteSession(
   accountId: string,
   snapshot: SessionSnapshot,

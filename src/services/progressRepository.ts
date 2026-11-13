@@ -21,6 +21,7 @@ import type {
   SessionIntervalRow,
   WorkoutSessionRow,
 } from '../types/database';
+import { pruneArchivedCachedSessions } from './sessionRepository';
 import { supabase } from './supabase';
 
 export type ProgressPeriod = 'week' | 'month' | 'all';
@@ -51,6 +52,7 @@ const emptyRows = (): ProgressRows => ({
   exercises: [],
   sets: [],
 });
+const historyCacheKey = 'progress:history:v1';
 const chunks = <T>(items: T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
     items.slice(index * size, (index + 1) * size),
@@ -96,24 +98,20 @@ export function progressRange(
   };
 }
 
-async function fetchProgress(
-  accountId: string,
-  range: ProgressRange,
-): Promise<ProgressCache> {
+async function fetchProgress(accountId: string): Promise<ProgressCache> {
   if (!supabase) throw new Error('Supabase is not configured.');
   const sessions: WorkoutSessionRow[] = [];
   const pageSize = 500;
   for (let page = 0; ; page++) {
-    let query = supabase
+    const query = supabase
       .from('workout_sessions')
       .select('*')
       .eq('user_id', accountId)
+      .is('archived_at', null)
       .in('status', ['completed', 'partial'])
       .order('finished_at', { ascending: false })
+      .order('id', { ascending: true })
       .range(page * pageSize, (page + 1) * pageSize - 1);
-    if (range.start)
-      query = query.gte('finished_at', range.start.toISOString());
-    if (range.end) query = query.lt('finished_at', range.end.toISOString());
     const result = await query;
     if (result.error) throw result.error;
     const batch = (result.data ?? []) as WorkoutSessionRow[];
@@ -127,34 +125,50 @@ async function fetchProgress(
     100,
   );
   for (const ids of sessionChunks) {
-    const [intervals, exercises] = await Promise.all([
-      supabase
+    for (let page = 0; ; page++) {
+      const result = await supabase
         .from('session_intervals')
         .select('*')
         .eq('user_id', accountId)
-        .in('session_id', ids),
-      supabase
+        .in('session_id', ids)
+        .order('id', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (result.error) throw result.error;
+      const batch = (result.data ?? []) as SessionIntervalRow[];
+      rows.intervals.push(...batch);
+      if (batch.length < pageSize) break;
+    }
+    for (let page = 0; ; page++) {
+      const result = await supabase
         .from('session_exercises')
         .select('*')
         .eq('user_id', accountId)
-        .in('session_id', ids),
-    ]);
-    if (intervals.error || exercises.error)
-      throw intervals.error ?? exercises.error;
-    rows.intervals.push(...((intervals.data ?? []) as SessionIntervalRow[]));
-    rows.exercises.push(...((exercises.data ?? []) as SessionExerciseRow[]));
+        .in('session_id', ids)
+        .order('id', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (result.error) throw result.error;
+      const batch = (result.data ?? []) as SessionExerciseRow[];
+      rows.exercises.push(...batch);
+      if (batch.length < pageSize) break;
+    }
   }
   for (const ids of chunks(
     rows.exercises.map((exercise) => exercise.id),
     100,
   )) {
-    const result = await supabase
-      .from('logged_sets')
-      .select('*')
-      .eq('user_id', accountId)
-      .in('session_exercise_id', ids);
-    if (result.error) throw result.error;
-    rows.sets.push(...((result.data ?? []) as LoggedSetRow[]));
+    for (let page = 0; ; page++) {
+      const result = await supabase
+        .from('logged_sets')
+        .select('*')
+        .eq('user_id', accountId)
+        .in('session_exercise_id', ids)
+        .order('id', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (result.error) throw result.error;
+      const batch = (result.data ?? []) as LoggedSetRow[];
+      rows.sets.push(...batch);
+      if (batch.length < pageSize) break;
+    }
   }
   const planNames: Record<string, { name: string; date: string }> = {};
   for (const ids of chunks(
@@ -186,16 +200,22 @@ export async function loadProgress(
 ): Promise<ProgressLoad> {
   let cached = await getCachedRead<ProgressCache>(
     accountId,
-    range.cacheKey,
+    historyCacheKey,
   ).catch(() => null);
+  if (!cached)
+    cached = await getCachedRead<ProgressCache>(
+      accountId,
+      'progress:all',
+    ).catch(() => null);
   let isCached = true;
   let error: string | null = null;
   if (!offline) {
     try {
-      const fresh = await fetchProgress(accountId, range);
+      if (await pruneArchivedCachedSessions(accountId)) cached = null;
+      const fresh = await fetchProgress(accountId);
       cached = fresh;
       isCached = false;
-      await saveCachedRead(accountId, range.cacheKey, fresh).catch(() => {
+      await saveCachedRead(accountId, historyCacheKey, fresh).catch(() => {
         error = 'Offline copy could not be saved.';
       });
     } catch (issue) {

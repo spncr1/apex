@@ -1,4 +1,3 @@
-import { Dumbbell } from 'lucide-react-native';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ApexBrand } from '../../components/ApexBrand';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
 import { useAuth } from './AuthProvider';
 
@@ -78,12 +78,7 @@ export function SignInScreen() {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.brandRow}>
-            <View style={styles.brandIcon}>
-              <Dumbbell size={26} color={colors.accent} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.brandName}>WORKOUT TRACKER</Text>
-          </View>
+          <ApexBrand />
 
           <Text style={styles.heading}>
             {creatingAccount ? 'Start training.' : 'Welcome back.'}
@@ -192,29 +187,8 @@ const styles = StyleSheet.create({
   keyboardArea: { flex: 1 },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
     padding: spacing.xl,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xxl,
-  },
-  brandIcon: {
-    width: sizing.touchTarget,
-    height: sizing.touchTarget,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  brandName: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: typography.size.body,
+    paddingTop: spacing.lg,
   },
   heading: {
     color: colors.textPrimary,

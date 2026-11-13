@@ -25,8 +25,8 @@ export interface ProgressSummary {
   completedCount: number;
   partialCount: number;
   activeMinutes: number;
+  totalExercises: number;
   loggedSets: number;
-  volumeKg: number;
   bests: ExerciseBestRow[];
   recent: {
     session: WorkoutSessionRow;
@@ -85,26 +85,71 @@ export function summarizeProgress(
     exercises.set(snapshot.session.id, snapshot.exercises);
     sets.set(snapshot.session.id, snapshot.sets);
   }
-  const performed = [...sessions.values()]
-    .filter((session) => {
-      if (session.status !== 'completed' && session.status !== 'partial')
-        return false;
-      const finished = Date.parse(session.finished_at ?? session.started_at);
-      return (
-        (start === null || finished >= start.getTime()) &&
-        (end === null || finished < end.getTime())
-      );
-    })
+  const finishedSessions = [...sessions.values()]
+    .filter(
+      (session) =>
+        !session.archived_at &&
+        (session.status === 'completed' || session.status === 'partial'),
+    )
     .sort(
       (a, b) =>
-        Date.parse(b.finished_at ?? b.started_at) -
-        Date.parse(a.finished_at ?? a.started_at),
+        Date.parse(a.finished_at ?? a.started_at) -
+          Date.parse(b.finished_at ?? b.started_at) || a.id.localeCompare(b.id),
     );
+  const inRange = (session: WorkoutSessionRow) => {
+    const finished = Date.parse(session.finished_at ?? session.started_at);
+    return (
+      (start === null || finished >= start.getTime()) &&
+      (end === null || finished < end.getTime())
+    );
+  };
+  const performed = finishedSessions.filter(inRange).reverse();
   let activeMs = 0;
+  let totalExercises = 0;
   let loggedSets = 0;
-  let volumeKg = 0;
-  const bestByExercise = new Map<string, ExerciseBestRow>();
+  const bestWeightByExercise = new Map<string, number>();
+  const recordsInRange = new Map<string, ExerciseBestRow>();
   const recent: ProgressSummary['recent'] = [];
+  for (const session of finishedSessions) {
+    const byId = new Map(
+      (exercises.get(session.id) ?? []).map((exercise) => [
+        exercise.id,
+        exercise,
+      ]),
+    );
+    const sessionBests = new Map<string, ExerciseBestRow>();
+    for (const set of sets.get(session.id) ?? []) {
+      if (
+        set.set_type !== 'working' ||
+        set.actual_reps === null ||
+        set.actual_weight_kg === null
+      )
+        continue;
+      const exercise = byId.get(set.session_exercise_id);
+      if (!exercise) continue;
+      const weight = Number(set.actual_weight_kg);
+      const previous = sessionBests.get(exercise.exercise_id);
+      if (
+        !previous ||
+        weight > previous.weightKg ||
+        (weight === previous.weightKg && set.actual_reps > previous.reps)
+      )
+        sessionBests.set(exercise.exercise_id, {
+          exerciseId: exercise.exercise_id,
+          name: exercise.name_snapshot,
+          weightKg: weight,
+          reps: set.actual_reps,
+          performedAt: session.finished_at ?? session.started_at,
+        });
+    }
+    for (const best of sessionBests.values()) {
+      const previousWeight = bestWeightByExercise.get(best.exerciseId);
+      if (previousWeight !== undefined && best.weightKg <= previousWeight)
+        continue;
+      bestWeightByExercise.set(best.exerciseId, best.weightKg);
+      if (inRange(session)) recordsInRange.set(best.exerciseId, best);
+    }
+  }
   for (const session of performed) {
     const sessionIntervals = intervals.get(session.id) ?? [];
     const durationMs = sessionIntervals.reduce((sum, interval) => {
@@ -119,33 +164,17 @@ export function summarizeProgress(
     }, 0);
     activeMs += durationMs;
     const sessionExercises = exercises.get(session.id) ?? [];
-    const byId = new Map(
-      sessionExercises.map((exercise) => [exercise.id, exercise]),
-    );
+    const byId = new Set(sessionExercises.map((exercise) => exercise.id));
+    const completedExerciseIds = new Set<string>();
     let sessionSetCount = 0;
     for (const set of sets.get(session.id) ?? []) {
       if (set.actual_reps === null || set.actual_weight_kg === null) continue;
       sessionSetCount++;
       loggedSets++;
-      volumeKg += set.actual_reps * Number(set.actual_weight_kg);
-      const exercise = byId.get(set.session_exercise_id);
-      if (!exercise || set.set_type !== 'working') continue;
-      const weight = Number(set.actual_weight_kg);
-      const previous = bestByExercise.get(exercise.exercise_id);
-      if (
-        !previous ||
-        weight > previous.weightKg ||
-        (weight === previous.weightKg && set.actual_reps > previous.reps)
-      ) {
-        bestByExercise.set(exercise.exercise_id, {
-          exerciseId: exercise.exercise_id,
-          name: exercise.name_snapshot,
-          weightKg: weight,
-          reps: set.actual_reps,
-          performedAt: session.finished_at ?? session.started_at,
-        });
-      }
+      if (byId.has(set.session_exercise_id) && set.set_type === 'working')
+        completedExerciseIds.add(set.session_exercise_id);
     }
+    totalExercises += completedExerciseIds.size;
     if (recent.length < 10)
       recent.push({
         session,
@@ -164,10 +193,12 @@ export function summarizeProgress(
     partialCount: performed.filter((session) => session.status === 'partial')
       .length,
     activeMinutes: Math.round(activeMs / 60000),
+    totalExercises,
     loggedSets,
-    volumeKg,
-    bests: [...bestByExercise.values()].sort((a, b) =>
-      a.name.localeCompare(b.name),
+    bests: [...recordsInRange.values()].sort(
+      (a, b) =>
+        Date.parse(b.performedAt) - Date.parse(a.performedAt) ||
+        a.name.localeCompare(b.name),
     ),
     recent,
   };

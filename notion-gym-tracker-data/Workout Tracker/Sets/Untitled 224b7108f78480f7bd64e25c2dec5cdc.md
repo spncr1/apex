@@ -1,0 +1,9 @@
+# Untitled
+
+Workout: HW1 (../Workouts/HW1%20224b7108f78480eb9e5bee2581b53a48.md)
+Exercise: Push-Ups (../Exercises/Push-Ups%20214b7108f784808e904de20ad4ef411f.md)
+Set: 2
+Reps: 12
+Weight: 6.4
+Done: No
+Muscle Group: https://app.notion.com/316b7108f784805fb1d3d9a1536c66d4

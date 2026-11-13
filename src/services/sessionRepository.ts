@@ -3,6 +3,8 @@ import { loadPlanning, type PlanDetail } from './planningRepository';
 import {
   cacheRemoteSession,
   findCachedSessionByPlan,
+  forgetArchivedSession,
+  getCachedSessionsForAccount,
   saveSessionEdit,
 } from '../features/sessions/sessionStore';
 import { syncPendingSessions } from '../features/sessions/sessionSync';
@@ -22,6 +24,33 @@ export interface SessionLoad {
   error: string | null;
 }
 
+export async function pruneArchivedCachedSessions(
+  accountId: string,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const local = (await getCachedSessionsForAccount(accountId)).filter(
+    (item) => item.syncState === 'clean',
+  );
+  let removed = false;
+  for (let offset = 0; offset < local.length; offset += 100) {
+    const ids = local
+      .slice(offset, offset + 100)
+      .map((item) => item.snapshot.session.id);
+    const result = await supabase
+      .from('workout_sessions')
+      .select('id')
+      .eq('user_id', accountId)
+      .in('id', ids)
+      .not('archived_at', 'is', null);
+    if (result.error) throw result.error;
+    for (const row of result.data ?? []) {
+      await forgetArchivedSession(accountId, row.id);
+      removed = true;
+    }
+  }
+  return removed;
+}
+
 export async function loadWorkoutSession(
   accountId: string,
   planId: string,
@@ -32,6 +61,14 @@ export async function loadWorkoutSession(
   const planning = await loadPlanning(accountId, week, offline);
   const plan =
     planning.snapshot?.plans.find((item) => item.plan.id === planId) ?? null;
+  if (!offline && planning.snapshot && !plan) {
+    return {
+      plan: null,
+      snapshot: null,
+      syncState: null,
+      error: 'Workout not found.',
+    };
+  }
   const cached = await findCachedSessionByPlan(accountId, planId);
   if (cached && (offline || cached.syncState !== 'clean' || !supabase))
     return {
@@ -52,6 +89,7 @@ export async function loadWorkoutSession(
     .from('workout_sessions')
     .select('*')
     .eq('user_id', accountId)
+    .is('archived_at', null)
     .eq('planned_workout_id', planId)
     .maybeSingle();
   if (result.error)

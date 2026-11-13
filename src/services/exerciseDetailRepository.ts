@@ -16,6 +16,7 @@ import type {
   SessionRevisionRow,
   WorkoutSessionRow,
 } from '../types/database';
+import { pruneArchivedCachedSessions } from './sessionRepository';
 import { supabase } from './supabase';
 
 type HistoryRows = {
@@ -49,6 +50,11 @@ export async function loadExerciseDetail(
   exerciseId: string,
   offline: boolean,
 ): Promise<ExerciseDetailLoad> {
+  if (!offline && supabase) {
+    await pruneArchivedCachedSessions(accountId).catch(() => {
+      // The normal online fetch below can still provide this detail.
+    });
+  }
   let cached = await getCachedRead<ExerciseDetailCache>(
     accountId,
     key(exerciseId),
@@ -135,6 +141,7 @@ export async function loadExerciseDetail(
               .from('workout_sessions')
               .select('*')
               .eq('user_id', accountId)
+              .is('archived_at', null)
               .in('id', sessionIds),
             supabase
               .from('logged_sets')

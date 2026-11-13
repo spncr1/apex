@@ -1,0 +1,9 @@
+# Untitled
+
+Workout: Chest/Shoulders (../Workouts/Chest%20Shoulders%201bfb7108f78480b1bf06e8237493cfaf.md)
+Exercise: Cable Front Raises (../Exercises/Cable%20Front%20Raises%20182b7108f78481c59088cec56b6e43c0.md)
+Set: 2
+Reps: 7
+Weight: 5
+Done: No
+Muscle Group: https://app.notion.com/182b7108f7848187b729c65d715fa3cb

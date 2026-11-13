@@ -1,0 +1,6 @@
+# Untitled
+
+Exercise: Wrist Curls (../Exercises/Wrist%20Curls%20316b7108f78480bcba62e051d9692ac7.md)
+Set: 2
+Done: No
+Muscle Group: https://app.notion.com/316b7108f784800eafeac2244192313a

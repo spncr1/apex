@@ -8,9 +8,8 @@ import {
   Clock3,
   Dumbbell,
   Layers3,
+  ListChecks,
   Target,
-  UserRound,
-  Weight,
   X,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
@@ -26,6 +25,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountButton } from '../../components/AccountButton';
+import { ApexBrand } from '../../components/ApexBrand';
 import { useAuth } from '../auth/AuthProvider';
 import { loadHome, type HomeLoadResult } from '../../services/homeRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
@@ -137,9 +138,9 @@ export function HomeScreen() {
   const selectedPlans = data?.plans.filter(
     (plan) => plan.planned_date === (selectedDay ? dateKey(selectedDay) : ''),
   );
-  const goal = data?.weeklyGoal ?? 4;
+  const goal = data?.weeklyGoal ?? null;
   const completed = data?.completedCount ?? 0;
-  const progress = Math.min(100, (completed / goal) * 100);
+  const progress = goal === null ? 0 : Math.min(100, (completed / goal) * 100);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -156,26 +157,14 @@ export function HomeScreen() {
         <View style={styles.heroArea}>
           <View pointerEvents="none" style={styles.heroSlashOne} />
           <View pointerEvents="none" style={styles.heroSlashTwo} />
-          <View style={styles.topRow}>
-            <View style={styles.brandRow}>
-              <Dumbbell size={30} color={colors.accent} strokeWidth={2.6} />
-              <View>
-                <Text style={styles.brand}>WORKOUT TRACKER</Text>
-                <Text style={styles.brandSub}>TRAIN / LOG / PROGRESS</Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={() => router.push('/account')}
-              style={styles.accountButton}
-              accessibilityRole="button"
-              accessibilityLabel="Open account"
-            >
-              <UserRound size={24} color={colors.textPrimary} />
-            </Pressable>
-          </View>
+          <AccountButton />
+          <ApexBrand />
+          <Text style={styles.brandSub}>TRAIN / LOG / PROGRESS</Text>
           <Text style={styles.greeting}>
             Good{' '}
-            <Text style={styles.greetingAccent}>{greetingFor(today)} Spencer.</Text>
+            <Text style={styles.greetingAccent}>
+              {greetingFor(today)} Spencer.
+            </Text>
           </Text>
           <Text style={styles.subGreeting}>Here’s your week at a glance.</Text>
         </View>
@@ -347,7 +336,13 @@ export function HomeScreen() {
               <Text style={styles.sectionTitle}>Weekly Goal</Text>
             </View>
             <Text style={styles.goalCount}>
-              <Text style={styles.accentText}>{completed}</Text> / {goal}
+              {goal === null ? (
+                'Set a goal in Plan'
+              ) : (
+                <>
+                  <Text style={styles.accentText}>{completed}</Text> / {goal}
+                </>
+              )}
             </Text>
           </View>
           <View style={styles.progressTrack}>
@@ -357,22 +352,22 @@ export function HomeScreen() {
             <Metric
               icon={Dumbbell}
               value={String(completed)}
-              label="Completed"
+              label="Completed sessions"
             />
             <Metric
               icon={Clock3}
               value={formatDuration(data?.activeMinutes ?? 0)}
-              label="Total Time"
+              label="Active time"
+            />
+            <Metric
+              icon={ListChecks}
+              value={String(data?.totalExercises ?? 0)}
+              label="Total exercises"
             />
             <Metric
               icon={Layers3}
-              value={String(data?.setCount ?? 0)}
-              label="Total Sets"
-            />
-            <Metric
-              icon={Weight}
-              value={`${Math.round(data?.volumeKg ?? 0).toLocaleString('en-AU')} kg`}
-              label="Volume"
+              value={String(data?.loggedSets ?? 0)}
+              label="Logged sets"
             />
           </View>
         </View>
@@ -507,7 +502,7 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
-  heroArea: { minHeight: 218, paddingTop: spacing.lg, overflow: 'hidden' },
+  heroArea: { minHeight: 218, paddingTop: spacing.sm, overflow: 'hidden' },
   heroSlashOne: {
     position: 'absolute',
     top: -60,
@@ -528,35 +523,15 @@ const styles = StyleSheet.create({
     opacity: 0.35,
     transform: [{ rotate: '28deg' }],
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  brand: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: typography.size.body,
-  },
   brandSub: {
     color: colors.textMuted,
     fontFamily: typography.family.regular,
     fontSize: 10,
     letterSpacing: 1.5,
-  },
-  accountButton: {
-    width: sizing.touchTarget,
-    height: sizing.touchTarget,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
+    textAlign: 'center',
   },
   greeting: {
-    marginTop: spacing.xxl,
+    marginTop: spacing.md,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
     fontSize: typography.size.hero,

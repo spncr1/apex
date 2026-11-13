@@ -1,0 +1,9 @@
+# Start from 23.2 next week and progress downwards from there - this isn’t stimulating enough
+
+Workout: Biceps/Triceps (../Workouts/Biceps%20Triceps%201dbb7108f78480b7b7b1dd2181e6b646.md)
+Exercise: Overhead Extensions (../Exercises/Overhead%20Extensions%201a4b7108f78480f883d8c962927fda19.md)
+Set: 1
+Reps: 5
+Weight: 24.9
+Done: No
+Muscle Group: https://app.notion.com/196b7108f78480b8bf4ef19fcedb8131

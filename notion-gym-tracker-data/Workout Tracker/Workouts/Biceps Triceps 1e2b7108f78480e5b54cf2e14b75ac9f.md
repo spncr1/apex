@@ -1,0 +1,7 @@
+# Biceps/Triceps
+
+Date: April 29, 2025
+Total Sets: 10
+Sets: Untitled (../Sets/Untitled%201e4b7108f784803d9639fce5eb11d4f8.md), Feel left tricep A LOT better on this weight - maybe start w/ 9.6 next week? (../Sets/Feel%20left%20tricep%20A%20LOT%20better%20on%20this%20weight%20-%20may%201e4b7108f78480ecb990fbcdae208617.md), Untitled (../Sets/Untitled%201e4b7108f7848054a097c3ffb1060156.md), Untitled (../Sets/Untitled%201e4b7108f7848018aad9d76fe77c8060.md), Notch B or C is fine (../Sets/Notch%20B%20or%20C%20is%20fine%201e4b7108f78480d9a39cde665a26ad76.md), I think I’ve got to stick to doing them like this now - maybe try the reverse of these weights next week (../Sets/I%20think%20I%E2%80%99ve%20got%20to%20stick%20to%20doing%20them%20like%20this%20%201e4b7108f78480e09b36cf417e08e04e.md), Untitled (../Sets/Untitled%201e4b7108f78480f2a62cd8d0563c8931.md), Failed on 9th rep (../Sets/Failed%20on%209th%20rep%201e4b7108f7848068b40ed74f0c127d47.md), Untitled (../Sets/Untitled%201e4b7108f784804d8420d4febba307d1.md), To get the most out of this exercise maybe I should do lower weights for higher reps - start w/ 19.8 next week to see how I go (../Sets/To%20get%20the%20most%20out%20of%20this%20exercise%20maybe%20I%20shoul%201e4b7108f7848004a1e9fc2558030f75.md)
+
+[Untitled](Biceps%20Triceps%201e2b-ac9f/Untitled%201e2b7108f784808b9d8ed07cd6a6cc58.csv)

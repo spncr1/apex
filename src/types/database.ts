@@ -53,6 +53,7 @@ export interface PlannedWorkoutRow {
   revision: number;
   created_at: Timestamp;
   updated_at: Timestamp;
+  archived_at: Timestamp | null;
 }
 
 export interface PlannedExerciseRow {
@@ -69,8 +70,8 @@ export interface PlannedSetTargetRow {
   planned_exercise_id: UUID;
   set_number: number;
   set_type: SetType;
-  target_reps: number;
-  target_weight_kg: number;
+  target_reps: number | null;
+  target_weight_kg: number | null;
 }
 
 export interface WorkoutSessionRow {
@@ -83,6 +84,7 @@ export interface WorkoutSessionRow {
   comments: string | null;
   revision: number;
   updated_at: Timestamp;
+  archived_at: Timestamp | null;
 }
 
 export interface SessionIntervalRow {

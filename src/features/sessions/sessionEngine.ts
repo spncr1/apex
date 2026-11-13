@@ -44,6 +44,7 @@ export function startSnapshot(
       comments: null,
       revision: 0,
       updated_at: now,
+      archived_at: null,
     },
     intervals: [
       {
@@ -228,12 +229,12 @@ function completionStatus(snapshot: SessionSnapshot): 'completed' | 'partial' {
     : 'partial';
 }
 
-export function correctSnapshot(
+export function saveEditedSnapshot(
   snapshot: SessionSnapshot,
   now: string,
 ): SessionSnapshot {
   if (snapshot.session.status === 'in_progress')
-    throw new Error('Finish this session before correcting it.');
+    throw new Error('Finish this session before editing it.');
   return {
     ...snapshot,
     session: {

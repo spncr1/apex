@@ -1,9 +1,10 @@
-import { ChevronLeft, Dumbbell, LogOut } from 'lucide-react-native';
+import { ChevronLeft, LogOut } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ApexBrand } from '../../components/ApexBrand';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
 import { useAuth } from './AuthProvider';
 
@@ -39,10 +40,7 @@ export function AccountScreen() {
           <ChevronLeft size={23} color={colors.textPrimary} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
-        <View style={styles.brandRow}>
-          <Dumbbell size={28} color={colors.accent} strokeWidth={2.5} />
-          <Text style={styles.brandName}>WORKOUT TRACKER</Text>
-        </View>
+        <ApexBrand />
 
         <View style={styles.card}>
           <Text style={styles.heading}>
@@ -84,26 +82,18 @@ export function AccountScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, padding: spacing.xl },
+  content: { flex: 1, padding: spacing.xl, paddingTop: spacing.lg },
   backButton: {
+    position: 'absolute',
+    top: spacing.lg,
+    left: spacing.xl,
+    zIndex: 1,
     minHeight: sizing.touchTarget,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginBottom: spacing.lg,
   },
   backText: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: typography.size.body,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xxl,
-  },
-  brandName: {
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
     fontSize: typography.size.body,

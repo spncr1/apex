@@ -1,0 +1,7 @@
+# Untitled
+
+Workout: Lower B (../Workouts/Lower%20B%202fab7108f78480bfa56bc8a3763211ba.md)
+Exercise: Seated Hamstring Curls (../Exercises/Seated%20Hamstring%20Curls%2019db7108f78480e5bed1f25738d2c281.md)
+Set: 2
+Done: No
+Muscle Group: https://app.notion.com/196b7108f78480768936f80cdfa9c4b5

@@ -1,5 +1,7 @@
 import { addDays, dateKey } from '../features/home/dates';
 import {
+  forgetArchivedSession,
+  getCachedSession,
   getCachedRead,
   saveCachedRead,
 } from '../features/sessions/sessionStore';
@@ -14,8 +16,8 @@ import { supabase } from './supabase';
 
 export interface SetTargetInput {
   set_type: SetType;
-  target_reps: number;
-  target_weight_kg: number;
+  target_reps: number | null;
+  target_weight_kg: number | null;
 }
 
 export interface ExerciseTargetInput {
@@ -31,7 +33,7 @@ export interface PlanDetail {
 
 export interface PlanningSnapshot {
   weekStart: string;
-  weeklyGoal: number;
+  weeklyGoal: number | null;
   plans: PlanDetail[];
   catalog: ExerciseRow[];
 }
@@ -58,8 +60,9 @@ function asTargets(
       .sort((a, b) => a.set_number - b.set_number)
       .map((set) => ({
         set_type: set.set_type,
-        target_reps: Number(set.target_reps),
-        target_weight_kg: Number(set.target_weight_kg),
+        target_reps: set.target_reps === null ? null : Number(set.target_reps),
+        target_weight_kg:
+          set.target_weight_kg === null ? null : Number(set.target_weight_kg),
       })),
   }));
 }
@@ -77,10 +80,15 @@ async function fetchPlanning(
       .from('planned_workouts')
       .select('*')
       .eq('user_id', accountId)
+      .is('archived_at', null)
       .gte('planned_date', weekStart)
       .lt('planned_date', weekEnd)
       .order('planned_date'),
-    supabase.from('exercises').select('*').order('name'),
+    supabase
+      .from('exercises')
+      .select('*')
+      .eq('owner_id', accountId)
+      .order('name'),
     supabase
       .from('user_settings')
       .select('weekly_goal')
@@ -116,7 +124,7 @@ async function fetchPlanning(
 
   return {
     weekStart,
-    weeklyGoal: settingsResult.data?.weekly_goal ?? 4,
+    weeklyGoal: settingsResult.data?.weekly_goal ?? null,
     catalog,
     plans: plans.map((plan) => ({
       plan,
@@ -134,12 +142,23 @@ export async function loadPlanning(
   offline: boolean,
 ): Promise<PlanningLoadResult> {
   const cacheKey = `planning:${dateKey(monday)}`;
+  const onlyOwnedCatalog = (snapshot: PlanningSnapshot | null) =>
+    snapshot && {
+      ...snapshot,
+      catalog: snapshot.catalog.filter(
+        (exercise) => exercise.owner_id === accountId,
+      ),
+    };
   if (offline) {
     const snapshot = await getCachedRead<PlanningSnapshot>(
       accountId,
       cacheKey,
     ).catch(() => null);
-    return { snapshot, isCached: snapshot !== null, error: null };
+    return {
+      snapshot: onlyOwnedCatalog(snapshot),
+      isCached: snapshot !== null,
+      error: null,
+    };
   }
   try {
     const snapshot = await fetchPlanning(accountId, monday);
@@ -153,7 +172,7 @@ export async function loadPlanning(
       cacheKey,
     ).catch(() => null);
     return {
-      snapshot,
+      snapshot: onlyOwnedCatalog(snapshot),
       isCached: snapshot !== null,
       error: issue instanceof Error ? issue.message : 'Could not load plan.',
     };
@@ -231,12 +250,43 @@ export async function loadSwapCandidates(
     .from('planned_workouts')
     .select('*')
     .eq('user_id', accountId)
+    .is('archived_at', null)
     .eq('status', 'planned')
     .neq('id', excludePlanId)
     .neq('planned_date', sourceDate)
     .order('planned_date');
   check(error);
   return (data ?? []) as PlannedWorkoutRow[];
+}
+
+export async function archiveFinishedWorkout(
+  accountId: string,
+  plan: PlannedWorkoutRow,
+): Promise<void> {
+  if (!supabase) throw new Error('Connect to remove a finished workout.');
+  const sessionResult = await supabase
+    .from('workout_sessions')
+    .select('id')
+    .eq('user_id', accountId)
+    .eq('planned_workout_id', plan.id)
+    .maybeSingle();
+  check(sessionResult.error);
+  if (!sessionResult.data) throw new Error('Finished session not found.');
+
+  const local = await getCachedSession(accountId, sessionResult.data.id);
+  if (local && local.syncState !== 'clean') {
+    throw new Error(
+      'Sync or resolve this session before removing the workout.',
+    );
+  }
+
+  const { data: sessionId, error } = await supabase.rpc(
+    'archive_finished_workout',
+    { p_plan_id: plan.id, p_expected_revision: plan.revision },
+  );
+  check(error);
+  if (!sessionId) throw new Error('Could not remove the workout.');
+  await forgetArchivedSession(accountId, sessionId);
 }
 
 export async function saveWeeklyGoal(accountId: string, goal: number) {

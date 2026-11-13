@@ -44,11 +44,27 @@ export function ExercisesScreen() {
           accountId,
           'catalog',
         ).catch(() => null);
-        if (active && cached) setCatalog(cached);
+        if (active && cached)
+          setCatalog({
+            groups: cached.groups.filter(
+              (group) => group.owner_id === accountId,
+            ),
+            exercises: cached.exercises.filter(
+              (exercise) => exercise.owner_id === accountId,
+            ),
+          });
         if (status === 'offline' || !supabase) return;
         const [groupsResult, exercisesResult] = await Promise.all([
-          supabase.from('muscle_groups').select('*').order('name'),
-          supabase.from('exercises').select('*').order('name'),
+          supabase
+            .from('muscle_groups')
+            .select('*')
+            .eq('owner_id', accountId)
+            .order('name'),
+          supabase
+            .from('exercises')
+            .select('*')
+            .eq('owner_id', accountId)
+            .order('name'),
         ]);
         if (groupsResult.error || exercisesResult.error) {
           throw new Error(

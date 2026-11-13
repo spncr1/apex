@@ -1,0 +1,9 @@
+# See if I can do 32 next week
+
+Workout: Abs (../Workouts/Abs%201dbb7108f7848080b29ae0e98f2f9657.md)
+Exercise: Kettlebell Walks (../Exercises/Kettlebell%20Walks%20196b7108f784806d82d8e4e2162a9e05.md)
+Set: 1
+Reps: 16
+Weight: 28
+Done: No
+Muscle Group: https://app.notion.com/182b7108f78481a18f78eff4b7fcb1e1

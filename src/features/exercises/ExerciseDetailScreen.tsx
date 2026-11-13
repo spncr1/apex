@@ -24,6 +24,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountButton } from '../../components/AccountButton';
+import { ApexBrand } from '../../components/ApexBrand';
 import {
   loadExerciseDetail,
   saveExerciseNotes,
@@ -32,15 +34,13 @@ import {
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
 import type { LoggedSetRow } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
+import { formatDay } from '../home/dates';
 import { bestForHistory, loggedSetsFor } from './exerciseHistory';
 
-const displayDate = (stamp: string) =>
-  new Date(stamp).toLocaleDateString('en-AU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+const displayDate = (stamp: string) => {
+  const date = new Date(stamp);
+  return `${formatDay(date)} ${date.getFullYear()}`;
+};
 const weightLabel = (value: number) =>
   `${Number.isInteger(value) ? value : value.toFixed(2)} kg`;
 
@@ -60,18 +60,17 @@ function SetTable({ sets }: { sets: LoggedSetRow[] }) {
           <View style={styles.setColumn}>
             <Text style={styles.setBadge}>{set.set_number}</Text>
           </View>
-          <Text style={[styles.cell, styles.repsColumn]}>
-            {set.actual_reps ?? '—'}
-          </Text>
-          <Text style={[styles.cell, styles.weightColumn]}>
-            {set.actual_weight_kg ?? '—'}
-          </Text>
-          <Text
-            style={[styles.cell, styles.notesColumn, styles.noteText]}
-            numberOfLines={2}
-          >
-            {set.notes || (set.set_type === 'warm_up' ? 'Warm-up' : '—')}
-          </Text>
+          <View style={[styles.cell, styles.repsColumn]}>
+            <Text style={styles.cellText}>{set.actual_reps ?? '—'}</Text>
+          </View>
+          <View style={[styles.cell, styles.weightColumn]}>
+            <Text style={styles.cellText}>{set.actual_weight_kg ?? '—'}</Text>
+          </View>
+          <View style={[styles.cell, styles.notesColumn]}>
+            <Text style={styles.noteText} numberOfLines={2}>
+              {set.notes || (set.set_type === 'warm_up' ? 'Warm-up' : '—')}
+            </Text>
+          </View>
         </View>
       ))}
     </View>
@@ -166,8 +165,8 @@ export function ExerciseDetailScreen({
           >
             <ArrowLeft color={colors.textPrimary} />
           </Pressable>
-          <Dumbbell color={colors.accent} size={26} />
-          <Text style={styles.brand}>WORKOUT TRACKER</Text>
+          <ApexBrand />
+          <AccountButton />
         </View>
         {loading ? (
           <ActivityIndicator color={colors.accent} style={styles.loader} />
@@ -199,7 +198,7 @@ export function ExerciseDetailScreen({
                 <Text style={styles.statTitle}>Best Weight</Text>
                 <Text style={styles.statValue}>
                   {best
-                    ? `${weightLabel(best.weightKg)} × ${best.reps}`
+                    ? `${weightLabel(best.weightKg)} × ${best.reps} reps`
                     : 'No result yet'}
                 </Text>
                 <Text style={styles.statSub}>
@@ -324,10 +323,9 @@ export function ExerciseDetailScreen({
                     >
                       <Dumbbell color={colors.accent} size={22} />
                       <Text style={styles.historyTitle} numberOfLines={2}>
-                        {item.workoutName} —{' '}
-                        {displayDate(
+                        {`${item.workoutName} (${displayDate(
                           item.session.finished_at ?? item.session.started_at,
-                        )}
+                        )})`}
                       </Text>
                       {expanded === item.session.id ? (
                         <ChevronUp color={colors.textPrimary} />
@@ -418,14 +416,16 @@ export function ExerciseDetailScreen({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, paddingBottom: 80 },
+  content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: 80 },
   top: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
   },
   back: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 1,
     width: sizing.touchTarget,
     height: sizing.touchTarget,
     borderWidth: 1,
@@ -433,11 +433,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  brand: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: typography.size.body,
   },
   loader: { marginTop: spacing.xxl },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -632,17 +627,24 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.semibold,
   },
   cell: {
-    color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.sm,
     minHeight: 35,
-    textAlign: 'center',
-    textAlignVertical: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: spacing.xs,
+  },
+  cellText: {
+    color: colors.textPrimary,
+    textAlign: 'center',
     fontFamily: typography.family.regular,
   },
-  noteText: { color: colors.textMuted, textAlign: 'left' },
+  noteText: {
+    color: colors.textMuted,
+    fontFamily: typography.family.regular,
+    alignSelf: 'stretch',
+  },
   sessionLink: {
     minHeight: sizing.touchTarget,
     flexDirection: 'row',

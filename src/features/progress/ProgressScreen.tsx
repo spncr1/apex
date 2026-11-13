@@ -5,8 +5,8 @@ import {
   Clock3,
   Dumbbell,
   Layers3,
+  ListChecks,
   Trophy,
-  Weight,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -71,6 +71,7 @@ export function ProgressScreen() {
     }, [accountId, status, range.cacheKey]),
   );
   const data = result?.summary;
+  const visibleBests = data?.bests.slice(0, period === 'week' ? 3 : 5) ?? [];
   return (
     <ScreenFrame
       eyebrow="YOUR PROGRESS"
@@ -139,24 +140,22 @@ export function ProgressScreen() {
           <Text style={styles.label}>Active time</Text>
         </View>
         <View style={styles.metric}>
+          <ListChecks color={colors.accent} size={25} />
+          <Text style={styles.value}>{data?.totalExercises ?? 0}</Text>
+          <Text style={styles.label}>Total exercises</Text>
+        </View>
+        <View style={styles.metric}>
           <Layers3 color={colors.accent} size={25} />
           <Text style={styles.value}>{data?.loggedSets ?? 0}</Text>
           <Text style={styles.label}>Logged sets</Text>
         </View>
-        <View style={styles.metric}>
-          <Weight color={colors.accent} size={25} />
-          <Text style={styles.value}>
-            {Math.round(data?.volumeKg ?? 0).toLocaleString('en-AU')} kg
-          </Text>
-          <Text style={styles.label}>Total volume</Text>
-        </View>
       </View>
       <View style={styles.sectionHeading}>
         <Trophy color={colors.accent} size={24} />
-        <Text style={styles.sectionTitle}>Exercise Bests</Text>
+        <Text style={styles.sectionTitle}>Personal Records</Text>
       </View>
-      {data?.bests.length ? (
-        data.bests.map((best) => (
+      {visibleBests.length ? (
+        visibleBests.map((best) => (
           <Pressable
             key={best.exerciseId}
             style={styles.sessionRow}
@@ -176,13 +175,17 @@ export function ProgressScreen() {
               </Text>
             </View>
             <Text style={styles.bestValue}>
-              {best.weightKg} kg × {best.reps}
+              {best.weightKg} kg × {best.reps} reps
             </Text>
             <ChevronRight color={colors.accent} size={20} />
           </Pressable>
         ))
       ) : (
-        <Text style={styles.empty}>No working sets logged in this period.</Text>
+        <Text style={styles.empty}>
+          {period === 'all'
+            ? 'No personal records logged yet.'
+            : 'No new weight records in this period.'}
+        </Text>
       )}
       <Text style={styles.sectionTitle}>Sessions</Text>
       {data?.recent.length ? (

@@ -1,0 +1,8 @@
+# Need a higher surface next week
+
+Workout: Home Workout 1 (../Workouts/Home%20Workout%201%20214b7108f7848097bc27f15616864be4.md)
+Exercise: Elevated Push-Up (../Exercises/Elevated%20Push-Up%20214b7108f78480a9be9ec55261dd57fe.md)
+Set: 1
+Reps: 12
+Done: No
+Muscle Group: https://app.notion.com/316b7108f784805fb1d3d9a1536c66d4

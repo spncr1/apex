@@ -50,9 +50,9 @@ export function AnatomyFigure({
   return (
     <View style={styles.card}>
       <Svg
-        viewBox="0 0 724 1448"
+        viewBox="60 120 604 1208"
         width="100%"
-        height={250}
+        height={320}
         accessibilityLabel={`${groupName} anatomy`}
       >
         {paths.flatMap((part) =>
@@ -85,7 +85,7 @@ export function AnatomyFigure({
       <Text style={styles.caption}>
         {interactiveSlugs.length
           ? 'Tap a highlighted region to filter exercises.'
-          : 'Whole muscle group view. Use the labels below to filter exercises.'}
+          : ''}
       </Text>
       {selectedSlug ? (
         <Pressable

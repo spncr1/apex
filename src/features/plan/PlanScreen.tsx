@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Dumbbell,
-  GitCompareArrows,
   MoreHorizontal,
   Plus,
 } from 'lucide-react-native';
@@ -24,6 +23,7 @@ import {
 import { ScreenFrame } from '../../components/ScreenFrame';
 import {
   adaptPlannedWorkout,
+  archiveFinishedWorkout,
   createPlannedWorkout,
   loadPlanning,
   loadSwapCandidates,
@@ -70,7 +70,7 @@ export function PlanScreen() {
   const [editor, setEditor] = useState<EditorSelection | null>(null);
   const [actionPlan, setActionPlan] = useState<PlanDetail | null>(null);
   const [swapCandidates, setSwapCandidates] = useState<PlannedWorkoutRow[]>([]);
-  const [goalDraft, setGoalDraft] = useState('4');
+  const [goalDraft, setGoalDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const todayKey = dateKey(new Date());
@@ -90,7 +90,12 @@ export function PlanScreen() {
         .then((next) => {
           if (!active) return;
           setResult(next);
-          if (next.snapshot) setGoalDraft(String(next.snapshot.weeklyGoal));
+          if (next.snapshot)
+            setGoalDraft(
+              next.snapshot.weeklyGoal === null
+                ? ''
+                : String(next.snapshot.weeklyGoal),
+            );
         })
         .catch((issue: unknown) => {
           if (active)
@@ -220,6 +225,43 @@ export function PlanScreen() {
     }
   }
 
+  async function removeFinished(detail: PlanDetail) {
+    if (!accountId || busy || offline) return;
+    const name = detail.plan.name_snapshot;
+    const message =
+      'This workout will disappear from Plan, history, and progress totals. You can add a fresh workout for this day.';
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(`Remove ${name}?\n\n${message}`)
+        : await new Promise<boolean>((resolve) =>
+            Alert.alert(`Remove ${name}?`, message, [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => resolve(true),
+              },
+            ]),
+          );
+    if (!confirmed) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await archiveFinishedWorkout(accountId, detail.plan);
+      setReloadVersion((value) => value + 1);
+    } catch (issue) {
+      setActionError(
+        issue instanceof Error ? issue.message : 'Could not remove workout.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <ScreenFrame
       eyebrow="YOUR SCHEDULE"
@@ -240,15 +282,6 @@ export function PlanScreen() {
 
       {snapshot ? (
         <>
-          <Pressable
-            style={styles.conflictLink}
-            onPress={() => router.push('/conflicts')}
-            accessibilityRole="button"
-            accessibilityLabel="Review session sync conflicts"
-          >
-            <GitCompareArrows size={20} color={colors.accent} />
-            <Text style={styles.conflictLinkText}>Review sync conflicts</Text>
-          </Pressable>
           <View style={styles.goalCard}>
             <View style={styles.sectionHeading}>
               <CalendarDays size={23} color={colors.accent} />
@@ -257,16 +290,22 @@ export function PlanScreen() {
             <View style={styles.goalControls}>
               <TextInput
                 value={goalDraft}
-                onChangeText={setGoalDraft}
+                onChangeText={(value) =>
+                  setGoalDraft(value.replace(/[^1-9]/g, '').slice(0, 1))
+                }
                 keyboardType="number-pad"
+                maxLength={1}
                 style={styles.goalInput}
                 editable={!offline}
                 accessibilityLabel="Weekly workout goal"
               />
               <Text style={styles.goalUnit}>completed workouts</Text>
               <Pressable
-                style={[styles.smallButton, offline && styles.disabled]}
-                disabled={offline || busy}
+                style={[
+                  styles.smallButton,
+                  (offline || busy || !goalDraft) && styles.disabled,
+                ]}
+                disabled={offline || busy || !goalDraft}
                 onPress={() => void updateGoal()}
                 accessibilityRole="button"
                 accessibilityLabel="Save weekly goal"
@@ -370,6 +409,38 @@ export function PlanScreen() {
                           <Text style={styles.editText}>Edit</Text>
                         </Pressable>
                       ) : null}
+                      {detail.plan.status === 'completed' ||
+                      detail.plan.status === 'partial' ? (
+                        <Pressable
+                          style={styles.editButton}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/session/[id]',
+                              params: {
+                                id: detail.plan.id,
+                                date: detail.plan.planned_date,
+                              },
+                            })
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`View ${detail.plan.name_snapshot} finished workout`}
+                        >
+                          <Text style={styles.editText}>View</Text>
+                        </Pressable>
+                      ) : null}
+                      {(detail.plan.status === 'completed' ||
+                        detail.plan.status === 'partial') &&
+                      !offline ? (
+                        <Pressable
+                          style={styles.editButton}
+                          disabled={busy}
+                          onPress={() => void removeFinished(detail)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${detail.plan.name_snapshot} finished workout`}
+                        >
+                          <Text style={styles.removeText}>Remove</Text>
+                        </Pressable>
+                      ) : null}
                       {detail.plan.status === 'planned' && !offline ? (
                         <Pressable
                           style={styles.editButton}
@@ -424,17 +495,6 @@ export function PlanScreen() {
 }
 
 const styles = StyleSheet.create({
-  conflictLink: {
-    minHeight: sizing.touchTarget,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  conflictLinkText: {
-    color: colors.accent,
-    fontFamily: typography.family.semibold,
-  },
   error: {
     color: colors.danger,
     fontFamily: typography.family.regular,
@@ -468,7 +528,8 @@ const styles = StyleSheet.create({
   },
   goalControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   goalInput: {
-    minWidth: 54,
+    width: 56,
+    flexShrink: 0,
     height: sizing.touchTarget,
     borderWidth: 1,
     borderColor: colors.border,
@@ -521,6 +582,11 @@ const styles = StyleSheet.create({
   },
   editText: {
     color: colors.accent,
+    fontFamily: typography.family.semibold,
+    fontSize: typography.size.label,
+  },
+  removeText: {
+    color: colors.danger,
     fontFamily: typography.family.semibold,
     fontSize: typography.size.label,
   },

@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock3,
-  Dumbbell,
   Pause,
   Play,
   Plus,
@@ -22,6 +21,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountButton } from '../../components/AccountButton';
+import { ApexBrand } from '../../components/ApexBrand';
 import {
   loadWorkoutSession,
   persistWorkoutSession,
@@ -34,7 +35,7 @@ import { formatDay } from '../home/dates';
 import {
   activeMilliseconds,
   addSet,
-  correctSnapshot,
+  saveEditedSnapshot,
   finishSnapshot,
   isRunning,
   pauseSnapshot,
@@ -68,10 +69,8 @@ export function SessionScreen() {
   const [now, setNow] = useState(stamp);
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
   const [comments, setCommentsDraft] = useState('');
-  const [correcting, setCorrecting] = useState(false);
-  const [correctionBase, setCorrectionBase] = useState<SessionSnapshot | null>(
-    null,
-  );
+  const [editing, setEditing] = useState(false);
+  const [editBase, setEditBase] = useState<SessionSnapshot | null>(null);
 
   const reload = useCallback(async () => {
     if (!accountId || !id || !date) return;
@@ -118,13 +117,22 @@ export function SessionScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const snapshot = correcting
-    ? (correctionBase ?? loaded?.snapshot ?? null)
+  const snapshot = editing
+    ? (editBase ?? loaded?.snapshot ?? null)
     : (loaded?.snapshot ?? null);
   const editable =
-    (snapshot?.session.status === 'in_progress' || correcting) &&
+    (snapshot?.session.status === 'in_progress' || editing) &&
     loaded?.syncState !== 'conflict';
   const running = snapshot ? isRunning(snapshot) : false;
+  const exerciseCount =
+    snapshot?.exercises.length ?? loaded?.plan?.exercises.length ?? 0;
+  const workingSetCount =
+    snapshot?.sets.length ??
+    loaded?.plan?.exercises.reduce(
+      (total, exercise) => total + exercise.sets.length,
+      0,
+    ) ??
+    0;
 
   async function persist(next: SessionSnapshot) {
     if (!accountId) return;
@@ -182,17 +190,19 @@ export function SessionScreen() {
     void act(() => foldDrafts(snapshot));
   }
 
-  async function saveCorrections() {
-    if (!snapshot || !correcting || busy) return;
+  async function saveEdits() {
+    if (!snapshot || !editing || busy) return;
     setBusy(true);
     setMessage(null);
     try {
-      await persist(correctSnapshot(foldDrafts(snapshot), stamp()));
-      setCorrecting(false);
-      setCorrectionBase(null);
+      await persist(saveEditedSnapshot(foldDrafts(snapshot), stamp()));
+      setEditing(false);
+      setEditBase(null);
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : 'Could not save corrections.',
+        error instanceof Error
+          ? error.message
+          : 'Could not save session changes.',
       );
     } finally {
       setBusy(false);
@@ -224,19 +234,27 @@ export function SessionScreen() {
     ]);
   }
 
+  function leaveSession() {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/plan');
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.top}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={leaveSession}
           style={styles.back}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <ArrowLeft color={colors.textPrimary} />
         </Pressable>
-        <Dumbbell color={colors.accent} size={26} />
-        <Text style={styles.brand}>WORKOUT TRACKER</Text>
+        <ApexBrand />
+        <AccountButton style={styles.accountButton} />
       </View>
       {loading ? (
         <ActivityIndicator color={colors.accent} style={styles.loader} />
@@ -254,6 +272,11 @@ export function SessionScreen() {
               {date ? formatDay(new Date(`${date}T12:00:00`)) : ''} ·{' '}
               {loaded?.plan?.plan.goal_snapshot ?? 'Workout'}
             </Text>
+            {loaded?.plan || snapshot ? (
+              <Text style={styles.sessionTotals}>
+                {exerciseCount} exercises · {workingSetCount} working sets
+              </Text>
+            ) : null}
             {message ? <Text style={styles.message}>{message}</Text> : null}
             {loaded?.syncState === 'conflict' ? (
               <Pressable
@@ -323,21 +346,21 @@ export function SessionScreen() {
             snapshot.session.status !== 'in_progress' &&
             loaded?.syncState !== 'conflict' ? (
               <Pressable
-                style={styles.correctionButton}
+                style={styles.editButton}
                 onPress={() => {
-                  if (correcting) {
-                    setCorrecting(false);
-                    setCorrectionBase(null);
+                  if (editing) {
+                    setEditing(false);
+                    setEditBase(null);
                     void reload();
                   } else {
-                    setCorrectionBase(snapshot);
-                    setCorrecting(true);
+                    setEditBase(snapshot);
+                    setEditing(true);
                   }
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.correctionText}>
-                  {correcting ? 'Cancel Corrections' : 'Correct Session'}
+                <Text style={styles.editText}>
+                  {editing ? 'Cancel Edit' : 'Edit Session'}
                 </Text>
               </Pressable>
             ) : null}
@@ -400,12 +423,6 @@ export function SessionScreen() {
                                 onBlur={saveDrafts}
                                 editable={editable}
                                 keyboardType="number-pad"
-                                placeholder={
-                                  set.target_reps === null
-                                    ? '—'
-                                    : String(set.target_reps)
-                                }
-                                placeholderTextColor={colors.textMuted}
                                 accessibilityLabel={`Set ${set.set_number} reps`}
                               />
                               <TextInput
@@ -417,12 +434,6 @@ export function SessionScreen() {
                                 onBlur={saveDrafts}
                                 editable={editable}
                                 keyboardType="decimal-pad"
-                                placeholder={
-                                  set.target_weight_kg === null
-                                    ? '—'
-                                    : String(set.target_weight_kg)
-                                }
-                                placeholderTextColor={colors.textMuted}
                                 accessibilityLabel={`Set ${set.set_number} weight in kilograms`}
                               />
                               <TextInput
@@ -438,10 +449,6 @@ export function SessionScreen() {
                                 accessibilityLabel={`Set ${set.set_number} notes`}
                               />
                             </View>
-                            <Text style={styles.targetText}>
-                              Target: {set.target_reps ?? '—'} reps ×{' '}
-                              {set.target_weight_kg ?? '—'} kg
-                            </Text>
                           </View>
                         );
                       })}
@@ -452,9 +459,9 @@ export function SessionScreen() {
                         onPress={() => {
                           const change = () =>
                             addSet(foldDrafts(snapshot), exercise.id, stamp());
-                          if (correcting) {
+                          if (editing) {
                             try {
-                              setCorrectionBase(change());
+                              setEditBase(change());
                             } catch (issue) {
                               setMessage(
                                 issue instanceof Error
@@ -479,12 +486,12 @@ export function SessionScreen() {
             <Pressable
               style={styles.finish}
               disabled={busy}
-              onPress={correcting ? () => void saveCorrections() : finish}
+              onPress={editing ? () => void saveEdits() : finish}
               accessibilityRole="button"
             >
               <CheckCircle2 color={colors.textOnAccent} size={27} />
               <Text style={styles.finishText}>
-                {correcting ? 'Save Corrections' : 'Finish Session'}
+                {editing ? 'Save Changes' : 'Finish Session'}
               </Text>
             </Pressable>
           ) : null}
@@ -495,26 +502,28 @@ export function SessionScreen() {
 }
 
 const styles = StyleSheet.create({
-  correctionButton: {
+  editButton: {
     minHeight: sizing.touchTarget,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: spacing.sm,
   },
-  correctionText: {
+  editText: {
     color: colors.accent,
     fontFamily: typography.family.semibold,
   },
   conflictLink: { minHeight: sizing.touchTarget, justifyContent: 'center' },
   safe: { flex: 1, backgroundColor: colors.background },
   top: {
-    minHeight: 64,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
     paddingHorizontal: spacing.lg,
   },
+  accountButton: { right: spacing.lg },
   back: {
+    position: 'absolute',
+    top: 0,
+    left: spacing.lg,
+    zIndex: 1,
     width: sizing.touchTarget,
     height: sizing.touchTarget,
     alignItems: 'center',
@@ -522,11 +531,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radii.md,
-  },
-  brand: {
-    color: colors.textPrimary,
-    fontFamily: typography.family.semibold,
-    fontSize: typography.size.body,
   },
   loader: { marginTop: spacing.xxl },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
@@ -545,6 +549,11 @@ const styles = StyleSheet.create({
   sub: {
     color: colors.textMuted,
     fontFamily: typography.family.regular,
+    marginTop: spacing.sm,
+  },
+  sessionTotals: {
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
     marginTop: spacing.sm,
   },
   message: {
@@ -633,24 +642,33 @@ const styles = StyleSheet.create({
   },
   setCol: {
     width: 40,
+    flexShrink: 0,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
   },
   numberCol: {
     flex: 1,
+    minWidth: 0,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
     textAlign: 'center',
   },
   noteCol: {
     flex: 1.4,
+    minWidth: 0,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
   },
   setBlock: { marginBottom: spacing.sm },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    width: '100%',
+  },
   setBadge: {
     width: 40,
+    flexShrink: 0,
     overflow: 'hidden',
     textAlign: 'center',
     backgroundColor: colors.accent,
@@ -661,6 +679,7 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: sizing.touchTarget,
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.sm,
@@ -669,9 +688,8 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     paddingHorizontal: spacing.sm,
   },
-  numberInput: { flex: 1, textAlign: 'center' },
-  notesInput: { flex: 1.4 },
-  targetText: { color: colors.textMuted, fontSize: 12, marginLeft: 48 },
+  numberInput: { flex: 1, minWidth: 0, textAlign: 'center' },
+  notesInput: { flex: 1.4, minWidth: 0 },
   addButton: {
     minHeight: sizing.touchTarget,
     borderWidth: 1,
