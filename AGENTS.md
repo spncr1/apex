@@ -1,6 +1,6 @@
 # Engineering rules
 
-The official application name is undecided. Use neutral identifiers and temporary visible labels only when necessary.
+The official product name is APEX and its technical identifier is `apex`.
 
 ## Scope and approval
 

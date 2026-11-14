@@ -1,10 +1,17 @@
 {
   "expo": {
-    "name": "Workout Tracker",
-    "slug": "gym-workout-tracker",
+    "name": "APEX",
+    "slug": "apex",
     "scheme": "gym-workout-tracker",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.spncr1.gymworkouttracker",
+      "icon": "./assets/icons/ios-app-icon.png"
+    },
+    "web": {
+      "favicon": "./assets/icons/ios-app-icon.png"
+    },
     "plugins": [
       [
         "expo-router",
@@ -20,6 +27,18 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "headers": {
+          "Cross-Origin-Embedder-Policy": "credentialless",
+          "Cross-Origin-Opener-Policy": "same-origin"
+        }
+      },
+      "eas": {
+        "projectId": "ff818e00-5a68-4de9-8386-55279eb918d7"
+      }
+    },
+    "owner": "spncr11"
   }
 }

@@ -32,5 +32,5 @@ Use the typed values in `src/theme/tokens.ts` as the single source for colours, 
 
 - Anatome is the approved source for anatomical SVG artwork. Keep approved files under `assets/anatomy/`. Future static and interactive views should use the same artwork where technically possible. Do not invent missing anatomical regions, SVG paths, or anatomical data.
 - The owner will select and supply superhero artwork for `assets/heroes/`. Do not generate, download, substitute, or source it independently.
-- The product name, wordmark, logo, and app icon remain unresolved. Reserve `assets/branding/` and `assets/icons/` for owner-approved assets. Temporary labels are placeholders, not approved identity.
+- APEX is the approved product name. Keep the owner-supplied logo in `assets/branding/` and app icons in `assets/icons/`.
 - Future UI must respect the logo, title, and artwork placements in the relevant mockups. Do not infer a permanent brand from the mockup text.
