@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -11,22 +11,65 @@ type AnatomyPath = {
   path: { left?: string[]; right?: string[] };
 };
 
-const groupRegions: Record<string, { view: BodyView; slugs: string[] }> = {
-  abdominals: { view: 'front', slugs: ['abs', 'obliques'] },
-  biceps: { view: 'front', slugs: ['biceps'] },
-  calves: { view: 'back', slugs: ['calves'] },
-  chest: { view: 'front', slugs: ['chest'] },
-  forearms: { view: 'front', slugs: ['forearm'] },
-  glutes: { view: 'back', slugs: ['gluteal'] },
-  hamstrings: { view: 'back', slugs: ['hamstring'] },
-  lats: { view: 'back', slugs: ['upper-back'] },
-  quadriceps: { view: 'front', slugs: ['quadriceps'] },
-  shoulders: { view: 'front', slugs: ['deltoids'] },
-  triceps: { view: 'front', slugs: ['triceps'] },
+type GroupRegion = { front?: readonly string[]; back?: readonly string[] };
+
+const groupRegions: Record<string, GroupRegion> = {
+  abs: { front: ['abs', 'obliques'] },
+  back: { back: ['upper-back', 'lower-back', 'trapezius'] },
+  biceps: { front: ['biceps'] },
+  calves: { back: ['calves'] },
+  chest: { front: ['chest'] },
+  forearms: { front: ['forearm'] },
+  glutes: { back: ['gluteal'] },
+  hamstrings: { back: ['hamstring'] },
+  lats: { back: ['upper-back'] },
+  legs: {
+    front: ['quadriceps', 'adductors', 'tibialis'],
+    back: ['hamstring', 'calves', 'gluteal', 'adductors'],
+  },
+  'lower back': { back: ['lower-back'] },
+  quadriceps: { front: ['quadriceps'] },
+  shoulders: { front: ['deltoids'] },
+  triceps: { front: ['triceps'] },
+  'upper back': { back: ['upper-back', 'trapezius'] },
+};
+
+const groupAliases: Record<string, string> = {
+  abdominal: 'abs',
+  abdominals: 'abs',
+  core: 'abs',
+  bicep: 'biceps',
+  calf: 'calves',
+  pec: 'chest',
+  pecs: 'chest',
+  pectorals: 'chest',
+  forearm: 'forearms',
+  glute: 'glutes',
+  hamstring: 'hamstrings',
+  lat: 'lats',
+  leg: 'legs',
+  'lower body': 'legs',
+  quad: 'quadriceps',
+  quads: 'quadriceps',
+  shoulder: 'shoulders',
+  delt: 'shoulders',
+  delts: 'shoulders',
+  tricep: 'triceps',
 };
 
 export function anatomyRegionFor(name: string) {
-  return groupRegions[name.trim().toLocaleLowerCase()] ?? null;
+  const normalized = name
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  const key = Object.prototype.hasOwnProperty.call(groupAliases, normalized)
+    ? groupAliases[normalized]
+    : normalized;
+  const region = Object.prototype.hasOwnProperty.call(groupRegions, key)
+    ? groupRegions[key]
+    : null;
+  return region ? { key, ...region } : null;
 }
 
 export function AnatomyFigure({
@@ -40,15 +83,48 @@ export function AnatomyFigure({
   interactiveSlugs: string[];
   onSelectSlug: (slug: string | null) => void;
 }) {
+  const [viewChoice, setViewChoice] = useState<BodyView>('front');
   const region = anatomyRegionFor(groupName);
+  const view: BodyView = region?.[viewChoice]
+    ? viewChoice
+    : region?.front
+      ? 'front'
+      : 'back';
+  const highlightedSlugs = region?.[view] ?? [];
   const paths = useMemo(
-    () => (region ? (bodyPaths.data.male[region.view] as AnatomyPath[]) : []),
-    [region],
+    () => bodyPaths.data.male[view] as AnatomyPath[],
+    [view],
   );
   if (!region) return null;
 
   return (
     <View style={styles.card}>
+      {region.front && region.back ? (
+        <View style={styles.viewPicker}>
+          {(['front', 'back'] as const).map((option) => (
+            <Pressable
+              key={option}
+              onPress={() => setViewChoice(option)}
+              style={[
+                styles.viewOption,
+                view === option && styles.viewOptionActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: view === option }}
+              accessibilityLabel={'Show ' + option + ' anatomy'}
+            >
+              <Text
+                style={[
+                  styles.viewOptionText,
+                  view === option && styles.viewOptionTextActive,
+                ]}
+              >
+                {option === 'front' ? 'Front' : 'Back'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <Svg
         viewBox="60 120 604 1208"
         width="100%"
@@ -62,7 +138,7 @@ export function AnatomyFigure({
                 key={`${part.slug}-${index}`}
                 d={path}
                 fill={
-                  region.slugs.includes(part.slug) &&
+                  highlightedSlugs.includes(part.slug) &&
                   (!selectedSlug || selectedSlug === part.slug)
                     ? colors.accent
                     : colors.surfaceElevated
@@ -82,11 +158,11 @@ export function AnatomyFigure({
           ),
         )}
       </Svg>
-      <Text style={styles.caption}>
-        {interactiveSlugs.length
-          ? 'Tap a highlighted region to filter exercises.'
-          : ''}
-      </Text>
+      {interactiveSlugs.length ? (
+        <Text style={styles.caption}>
+          Tap a highlighted region to filter exercises.
+        </Text>
+      ) : null}
       {selectedSlug ? (
         <Pressable
           style={styles.clear}
@@ -111,6 +187,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.md,
     marginBottom: spacing.xl,
+  },
+  viewPicker: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  viewOption: {
+    minHeight: 44,
+    minWidth: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  viewOptionActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  viewOptionText: {
+    color: colors.textPrimary,
+    fontFamily: typography.family.semibold,
+    fontSize: typography.size.label,
+  },
+  viewOptionTextActive: {
+    color: colors.background,
   },
   caption: {
     width: '100%',

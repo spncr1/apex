@@ -30,7 +30,7 @@ import type {
   MuscleSubdivisionRow,
 } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
-import { AnatomyFigure } from '../exercises/AnatomyFigure';
+import { AnatomyFigure, anatomyRegionFor } from '../exercises/AnatomyFigure';
 
 type GroupData = {
   group: MuscleGroupRow;
@@ -308,7 +308,7 @@ export function MuscleGroupScreen({
         (!query || exercise.name.toLocaleLowerCase().includes(query)),
     ) ?? [];
   const interactiveSlugs =
-    data?.group.name.toLowerCase() === 'abdominals'
+    data && anatomyRegionFor(data.group.name)?.key === 'abs'
       ? data.subdivisions.flatMap((item) =>
           item.name.toLowerCase().includes('rectus')
             ? ['abs']
