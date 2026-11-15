@@ -47,6 +47,6 @@ Run `npm run typecheck`, `npm run lint`, and `npm run format:check` for the repo
 
 `vercel.json` configures Vercel to run that web export, serve `dist/`, and route app URLs back to the Expo entry page. Set the same two `EXPO_PUBLIC_SUPABASE_*` variables in the Vercel project's **Production** environment before deploying. The deployed web app uses the configured Supabase project; moving from localhost to Vercel does not create a new database or copy account data.
 
-The hosted app is available at [apex-spencers-projects-bf694ca3.vercel.app](https://apex-spencers-projects-bf694ca3.vercel.app/).
+The hosted app is available at [apex-workout-log.vercel.app](https://apex-workout-log.vercel.app/).
 
 On iPhone, the hosted web app can be opened in Safari and added to the Home Screen. A native iOS build is a separate Expo/EAS workflow.
