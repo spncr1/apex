@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   bar: {
     height: 82,
     marginHorizontal: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xl,
     paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
     borderTopWidth: 1,
@@ -86,8 +86,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   item: {
-    borderRadius: radii.md,
-    marginHorizontal: 0,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    marginHorizontal: spacing.xs,
     marginVertical: spacing.xs,
   },
   label: {

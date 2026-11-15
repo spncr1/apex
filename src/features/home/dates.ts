@@ -25,7 +25,7 @@ export function formatWeekRange(monday: Date): string {
     day: 'numeric',
     month: 'short',
   }).format(sunday);
-  return `${start} – ${end}`;
+  return `${start} - ${end}`;
 }
 
 export function formatDay(date: Date): string {

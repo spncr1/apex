@@ -58,7 +58,7 @@ function Version({
               <Text key={set.id} style={styles.body}>
                 Set {set.set_number} ·{' '}
                 {set.set_type === 'warm_up' ? 'Warm-up' : 'Working'} ·{' '}
-                {set.actual_reps ?? '—'} reps × {set.actual_weight_kg ?? '—'} kg
+                {set.actual_reps ?? '-'} reps × {set.actual_weight_kg ?? '-'} kg
                 {set.notes ? ` · ${set.notes}` : ''}
               </Text>
             ))}

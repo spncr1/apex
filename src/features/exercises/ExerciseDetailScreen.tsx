@@ -61,14 +61,14 @@ function SetTable({ sets }: { sets: LoggedSetRow[] }) {
             <Text style={styles.setBadge}>{set.set_number}</Text>
           </View>
           <View style={[styles.cell, styles.repsColumn]}>
-            <Text style={styles.cellText}>{set.actual_reps ?? '—'}</Text>
+            <Text style={styles.cellText}>{set.actual_reps ?? '-'}</Text>
           </View>
           <View style={[styles.cell, styles.weightColumn]}>
-            <Text style={styles.cellText}>{set.actual_weight_kg ?? '—'}</Text>
+            <Text style={styles.cellText}>{set.actual_weight_kg ?? '-'}</Text>
           </View>
           <View style={[styles.cell, styles.notesColumn]}>
             <Text style={styles.noteText} numberOfLines={2}>
-              {set.notes || (set.set_type === 'warm_up' ? 'Warm-up' : '—')}
+              {set.notes || (set.set_type === 'warm_up' ? 'Warm-up' : '-')}
             </Text>
           </View>
         </View>

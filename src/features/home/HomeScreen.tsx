@@ -163,7 +163,7 @@ export function HomeScreen() {
           <Text style={styles.greeting}>
             Good{' '}
             <Text style={styles.greetingAccent}>
-              {greetingFor(today)} Spencer.
+              {greetingFor(today)},{'\n'}Spencer.
             </Text>
           </Text>
           <Text style={styles.subGreeting}>Here’s your week at a glance.</Text>
@@ -502,7 +502,11 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
-  heroArea: { minHeight: 218, paddingTop: spacing.sm, overflow: 'hidden' },
+  heroArea: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+    overflow: 'hidden',
+  },
   heroSlashOne: {
     position: 'absolute',
     top: -60,
@@ -531,17 +535,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   greeting: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
-    fontSize: typography.size.hero,
+    fontSize: typography.size.greeting,
+    lineHeight: 40,
   },
   greetingAccent: { color: colors.accent },
   subGreeting: {
     color: colors.textMuted,
     fontFamily: typography.family.regular,
     fontSize: typography.size.body,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
   },
   notice: {
     borderRadius: radii.md,
@@ -559,7 +564,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   weekArrow: {
     width: sizing.touchTarget,
@@ -570,7 +575,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  weekTitleBlock: { alignItems: 'center' },
+  weekTitleBlock: { alignItems: 'center', gap: spacing.xs },
   weekTitle: {
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
