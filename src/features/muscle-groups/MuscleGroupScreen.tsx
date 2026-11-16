@@ -3,14 +3,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Dumbbell,
+  Pencil,
   Plus,
   Save,
+  Trash2,
   X,
 } from 'lucide-react-native';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +25,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccountButton } from '../../components/AccountButton';
-import { getCachedRead, saveCachedRead } from '../sessions/sessionStore';
+import {
+  deleteCachedRead,
+  getCachedRead,
+  saveCachedRead,
+} from '../sessions/sessionStore';
 import { supabase } from '../../services/supabase';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
 import type {
@@ -62,6 +70,7 @@ export function MuscleGroupScreen({
   const router = useRouter();
   const { accountId, status } = useAuth();
   const [data, setData] = useState<GroupData | null>(null);
+  const [groupOptions, setGroupOptions] = useState<MuscleGroupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSubdivision, setSelectedSubdivision] = useState<string | null>(
@@ -72,9 +81,18 @@ export function MuscleGroupScreen({
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [addingExercise, setAddingExercise] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<ExerciseRow | null>(
+    null,
+  );
   const [addingLabel, setAddingLabel] = useState(false);
   const [labelName, setLabelName] = useState('');
   const [exerciseName, setExerciseName] = useState('');
+  const [exerciseGroupId, setExerciseGroupId] = useState<string | null>(null);
+  const [editSubdivisions, setEditSubdivisions] = useState<
+    MuscleSubdivisionRow[]
+  >([]);
+  const [classificationReady, setClassificationReady] = useState(true);
+  const subdivisionRequest = useRef(0);
   const [exerciseSubdivision, setExerciseSubdivision] = useState<string | null>(
     null,
   );
@@ -95,32 +113,43 @@ export function MuscleGroupScreen({
           setNotesDraft(cached.notes);
         }
         if (status === 'offline' || !supabase) return;
-        const [groupResult, subdivisionsResult, exercisesResult, noteResult] =
-          await Promise.all([
-            supabase
-              .from('muscle_groups')
-              .select('*')
-              .eq('id', groupId)
-              .maybeSingle(),
-            supabase
-              .from('muscle_subdivisions')
-              .select('*')
-              .eq('muscle_group_id', groupId)
-              .order('name'),
-            supabase
-              .from('exercises')
-              .select('*')
-              .eq('muscle_group_id', groupId)
-              .order('name'),
-            supabase
-              .from('muscle_group_notes')
-              .select('notes')
-              .eq('user_id', accountId)
-              .eq('muscle_group_id', groupId)
-              .maybeSingle(),
-          ]);
+        const [
+          groupResult,
+          groupsResult,
+          subdivisionsResult,
+          exercisesResult,
+          noteResult,
+        ] = await Promise.all([
+          supabase
+            .from('muscle_groups')
+            .select('*')
+            .eq('id', groupId)
+            .maybeSingle(),
+          supabase
+            .from('muscle_groups')
+            .select('*')
+            .eq('owner_id', accountId)
+            .order('name'),
+          supabase
+            .from('muscle_subdivisions')
+            .select('*')
+            .eq('muscle_group_id', groupId)
+            .order('name'),
+          supabase
+            .from('exercises')
+            .select('*')
+            .eq('muscle_group_id', groupId)
+            .order('name'),
+          supabase
+            .from('muscle_group_notes')
+            .select('notes')
+            .eq('user_id', accountId)
+            .eq('muscle_group_id', groupId)
+            .maybeSingle(),
+        ]);
         const queryError =
           groupResult.error ??
+          groupsResult.error ??
           subdivisionsResult.error ??
           exercisesResult.error ??
           noteResult.error;
@@ -135,6 +164,7 @@ export function MuscleGroupScreen({
         };
         if (active) {
           setData(next);
+          setGroupOptions((groupsResult.data ?? []) as MuscleGroupRow[]);
           setNotesDraft(next.notes);
         }
         await saveCachedRead(accountId, `group:${groupId}`, next).catch(() => {
@@ -191,32 +221,132 @@ export function MuscleGroupScreen({
     }
   }
 
+  function closeExerciseModal() {
+    subdivisionRequest.current += 1;
+    setAddingExercise(false);
+    setEditingExercise(null);
+    setExerciseName('');
+    setExerciseGroupId(null);
+    setExerciseSubdivision(null);
+    setEditSubdivisions([]);
+    setClassificationReady(true);
+    setError(null);
+  }
+
+  function openExerciseEditor(exercise: ExerciseRow) {
+    subdivisionRequest.current += 1;
+    setEditingExercise(exercise);
+    setExerciseName(exercise.name);
+    setExerciseGroupId(exercise.muscle_group_id);
+    setExerciseSubdivision(exercise.muscle_subdivision_id);
+    setEditSubdivisions(data?.subdivisions ?? []);
+    setClassificationReady(true);
+    setError(null);
+  }
+
+  async function chooseExerciseGroup(nextGroupId: string) {
+    if (
+      !accountId ||
+      !data ||
+      !supabase ||
+      (nextGroupId === exerciseGroupId && classificationReady)
+    )
+      return;
+    const requestId = ++subdivisionRequest.current;
+    setExerciseGroupId(nextGroupId);
+    setExerciseSubdivision(null);
+    setError(null);
+    if (nextGroupId === data.group.id) {
+      setEditSubdivisions(data.subdivisions);
+      setClassificationReady(true);
+      return;
+    }
+    setEditSubdivisions([]);
+    setClassificationReady(false);
+    const result = await supabase
+      .from('muscle_subdivisions')
+      .select('*')
+      .eq('muscle_group_id', nextGroupId)
+      .order('name');
+    if (subdivisionRequest.current !== requestId) return;
+    if (result.error) {
+      setError(
+        'Could not load labels for that muscle group. Select it again to retry.',
+      );
+      return;
+    }
+    setEditSubdivisions((result.data ?? []) as MuscleSubdivisionRow[]);
+    setClassificationReady(true);
+  }
+
   async function saveExercise() {
-    if (!accountId || !data || !supabase || !exerciseName.trim() || saving)
+    if (
+      !accountId ||
+      !data ||
+      !supabase ||
+      !exerciseName.trim() ||
+      saving ||
+      (editingExercise && (!exerciseGroupId || !classificationReady))
+    )
       return;
     setSaving(true);
     setError(null);
     try {
-      const { data: created, error: saveError } = await supabase
-        .from('exercises')
-        .insert({
-          owner_id: accountId,
-          muscle_group_id: data.group.id,
-          muscle_subdivision_id: exerciseSubdivision,
-          name: exerciseName.trim(),
-        })
-        .select('*')
-        .single();
+      const result = editingExercise
+        ? await supabase
+            .from('exercises')
+            .update({
+              name: exerciseName.trim(),
+              muscle_group_id: exerciseGroupId,
+              muscle_subdivision_id: exerciseSubdivision,
+            })
+            .eq('id', editingExercise.id)
+            .eq('owner_id', accountId)
+            .select('*')
+            .single()
+        : await supabase
+            .from('exercises')
+            .insert({
+              owner_id: accountId,
+              muscle_group_id: data.group.id,
+              muscle_subdivision_id: exerciseSubdivision,
+              name: exerciseName.trim(),
+            })
+            .select('*')
+            .single();
+      const { data: saved, error: saveError } = result;
       if (saveError) throw saveError;
+      const exercise = saved as ExerciseRow;
       const next = {
         ...data,
-        exercises: [...data.exercises, created as ExerciseRow].sort((a, b) =>
-          a.name.localeCompare(b.name),
-        ),
+        exercises: [
+          ...data.exercises.filter((item) => item.id !== exercise.id),
+          ...(exercise.muscle_group_id === data.group.id ? [exercise] : []),
+        ].sort((a, b) => a.name.localeCompare(b.name)),
       };
       setData(next);
       await (async () => {
-        await saveCachedRead(accountId, `group:${data.group.id}`, next);
+        await saveCachedRead(accountId, 'group:' + data.group.id, next);
+        if (editingExercise && exercise.muscle_group_id !== data.group.id) {
+          const destinationCache = await getCachedRead<GroupData>(
+            accountId,
+            'group:' + exercise.muscle_group_id,
+          );
+          if (destinationCache)
+            await saveCachedRead(
+              accountId,
+              'group:' + exercise.muscle_group_id,
+              {
+                ...destinationCache,
+                exercises: [
+                  ...destinationCache.exercises.filter(
+                    (item) => item.id !== exercise.id,
+                  ),
+                  exercise,
+                ].sort((a, b) => a.name.localeCompare(b.name)),
+              },
+            );
+        }
         const directoryCache = await getCachedRead<{
           groups: MuscleGroupRow[];
           exercises: ExerciseRow[];
@@ -225,21 +355,130 @@ export function MuscleGroupScreen({
           await saveCachedRead(accountId, 'catalog', {
             ...directoryCache,
             exercises: [
-              ...directoryCache.exercises,
-              created as ExerciseRow,
+              ...directoryCache.exercises.filter(
+                (item) => item.id !== exercise.id,
+              ),
+              exercise,
             ].sort((a, b) => a.name.localeCompare(b.name)),
           });
+        if (editingExercise) {
+          const detailCache = await getCachedRead<{ exercise: ExerciseRow }>(
+            accountId,
+            'exercise-detail:' + exercise.id,
+          );
+          if (detailCache)
+            await saveCachedRead(accountId, 'exercise-detail:' + exercise.id, {
+              ...detailCache,
+              exercise,
+              group:
+                groupOptions.find(
+                  (item) => item.id === exercise.muscle_group_id,
+                ) ?? data.group,
+            });
+        }
       })().catch(() => {
         setError(
           'Exercise saved online, but its offline copy was not updated.',
         );
       });
       setAddingExercise(false);
+      setEditingExercise(null);
       setExerciseName('');
+      setExerciseGroupId(null);
       setExerciseSubdivision(null);
+      setEditSubdivisions([]);
     } catch (issue) {
       setError(
-        issue instanceof Error ? issue.message : 'Could not save exercise.',
+        typeof issue === 'object' &&
+          issue !== null &&
+          'code' in issue &&
+          issue.code === '23505'
+          ? 'An exercise with that name already exists in the selected muscle group.'
+          : issue instanceof Error
+            ? issue.message
+            : 'Could not save exercise.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteExercise(exercise: ExerciseRow) {
+    if (
+      !accountId ||
+      !data ||
+      !supabase ||
+      saving ||
+      status === 'offline' ||
+      exercise.owner_id !== accountId
+    )
+      return;
+    const message =
+      'This removes the exercise from your library. Exercises used in workouts or with notes cannot be deleted.';
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm('Delete ' + exercise.name + '?\n\n' + message)
+        : await new Promise<boolean>((resolve) =>
+            Alert.alert('Delete ' + exercise.name + '?', message, [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => resolve(true),
+              },
+            ]),
+          );
+    if (!confirmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: removed, error: deleteError } = await supabase
+        .from('exercises')
+        .delete()
+        .eq('id', exercise.id)
+        .eq('owner_id', accountId)
+        .select('id')
+        .maybeSingle();
+      if (deleteError) throw deleteError;
+      if (!removed) throw new Error('Exercise could not be deleted.');
+      const next = {
+        ...data,
+        exercises: data.exercises.filter((item) => item.id !== exercise.id),
+      };
+      setData(next);
+      await (async () => {
+        await saveCachedRead(accountId, 'group:' + data.group.id, next);
+        const directoryCache = await getCachedRead<{
+          groups: MuscleGroupRow[];
+          exercises: ExerciseRow[];
+        }>(accountId, 'catalog');
+        if (directoryCache)
+          await saveCachedRead(accountId, 'catalog', {
+            ...directoryCache,
+            exercises: directoryCache.exercises.filter(
+              (item) => item.id !== exercise.id,
+            ),
+          });
+        await deleteCachedRead(accountId, 'exercise-detail:' + exercise.id);
+      })().catch(() => {
+        setError(
+          'Exercise deleted online, but its offline copy was not updated.',
+        );
+      });
+    } catch (issue) {
+      setError(
+        typeof issue === 'object' &&
+          issue !== null &&
+          'code' in issue &&
+          issue.code === '23503'
+          ? 'This exercise has workout records or notes, so it cannot be deleted. Those records stay intact.'
+          : issue instanceof Error
+            ? issue.message
+            : 'Could not delete exercise.',
       );
     } finally {
       setSaving(false);
@@ -299,6 +538,9 @@ export function MuscleGroupScreen({
     setSelectedSubdivision(subdivisionId);
   }
 
+  const exerciseSubdivisions = editingExercise
+    ? editSubdivisions
+    : (data?.subdivisions ?? []);
   const query = search.trim().toLocaleLowerCase();
   const exercises =
     data?.exercises.filter(
@@ -324,12 +566,16 @@ export function MuscleGroupScreen({
         <AccountButton style={styles.accountButton} />
         <Pressable
           style={styles.back}
-          onPress={() => router.back()}
+          onPress={() =>
+            router.canGoBack()
+              ? router.back()
+              : router.replace('/(tabs)/exercises')
+          }
           accessibilityRole="button"
-          accessibilityLabel="Back to muscle groups"
+          accessibilityLabel="Go back"
         >
           <ChevronLeft color={colors.textPrimary} />
-          <Text style={styles.backText}>Muscle Groups</Text>
+          <Text style={styles.backText}>Back</Text>
         </Pressable>
         <View style={styles.eyebrowRow}>
           <View style={styles.mark} />
@@ -477,22 +723,45 @@ export function MuscleGroupScreen({
             />
             {exercises.length ? (
               exercises.map((exercise) => (
-                <Pressable
-                  key={exercise.id}
-                  style={styles.exerciseRow}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/(tabs)/exercises/detail/[id]',
-                      params: { id: exercise.id },
-                    })
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${exercise.name}`}
-                >
-                  <Dumbbell size={21} color={colors.accent} />
-                  <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  <ChevronRight size={20} color={colors.textPrimary} />
-                </Pressable>
+                <View key={exercise.id} style={styles.exerciseRow}>
+                  <Pressable
+                    style={styles.exerciseOpen}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(tabs)/exercises/detail/[id]',
+                        params: { id: exercise.id },
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={'Open ' + exercise.name}
+                  >
+                    <Dumbbell size={21} color={colors.accent} />
+                    <Text style={styles.exerciseName}>{exercise.name}</Text>
+                    <ChevronRight size={20} color={colors.textPrimary} />
+                  </Pressable>
+                  {exercise.owner_id === accountId ? (
+                    <>
+                      <Pressable
+                        style={styles.exerciseAction}
+                        onPress={() => openExerciseEditor(exercise)}
+                        disabled={saving || loading || status === 'offline'}
+                        accessibilityRole="button"
+                        accessibilityLabel={'Edit ' + exercise.name}
+                      >
+                        <Pencil size={18} color={colors.accent} />
+                      </Pressable>
+                      <Pressable
+                        style={styles.exerciseAction}
+                        onPress={() => void deleteExercise(exercise)}
+                        disabled={saving || status === 'offline'}
+                        accessibilityRole="button"
+                        accessibilityLabel={'Delete ' + exercise.name}
+                      >
+                        <Trash2 size={18} color={colors.danger} />
+                      </Pressable>
+                    </>
+                  ) : null}
+                </View>
               ))
             ) : (
               <Text style={styles.empty}>No exercises in this view.</Text>
@@ -501,17 +770,19 @@ export function MuscleGroupScreen({
         ) : null}
       </ScrollView>
       <Modal
-        visible={addingExercise}
+        visible={addingExercise || editingExercise !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => setAddingExercise(false)}
+        onRequestClose={closeExerciseModal}
       >
         <View style={styles.backdrop}>
-          <View style={styles.modalPanel}>
+          <View style={[styles.modalPanel, styles.exerciseModalPanel]}>
             <View style={styles.modalHeading}>
-              <Text style={styles.modalTitle}>Add Exercise</Text>
+              <Text style={styles.modalTitle}>
+                {editingExercise ? 'Edit Exercise' : 'Add Exercise'}
+              </Text>
               <Pressable
-                onPress={() => setAddingExercise(false)}
+                onPress={closeExerciseModal}
                 style={styles.close}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -519,50 +790,118 @@ export function MuscleGroupScreen({
                 <X color={colors.textPrimary} />
               </Pressable>
             </View>
-            <TextInput
-              value={exerciseName}
-              onChangeText={setExerciseName}
-              style={styles.notesInput}
-              placeholder="Exercise name"
-              placeholderTextColor={colors.textMuted}
-              accessibilityLabel="Exercise name"
-            />
-            {data?.subdivisions.length ? (
-              <View style={styles.modalFilters}>
-                <Pressable
-                  style={[
-                    styles.filter,
-                    !exerciseSubdivision && styles.filterActive,
-                  ]}
-                  onPress={() => setExerciseSubdivision(null)}
-                >
-                  <Text style={styles.filterText}>Whole group</Text>
-                </Pressable>
-                {data.subdivisions.map((item) => (
+            <ScrollView
+              style={styles.exerciseModalBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TextInput
+                value={exerciseName}
+                onChangeText={setExerciseName}
+                style={styles.notesInput}
+                placeholder="Exercise name"
+                placeholderTextColor={colors.textMuted}
+                accessibilityLabel="Exercise name"
+              />
+              {editingExercise ? (
+                <>
+                  <Text style={styles.modalFieldLabel}>Muscle group</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.groupPicker}
+                  >
+                    {groupOptions.map((group) => (
+                      <Pressable
+                        key={group.id}
+                        style={[
+                          styles.filter,
+                          exerciseGroupId === group.id && styles.filterActive,
+                        ]}
+                        onPress={() => void chooseExerciseGroup(group.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          selected: exerciseGroupId === group.id,
+                        }}
+                        accessibilityLabel={group.name}
+                      >
+                        <Text
+                          style={[
+                            styles.filterText,
+                            exerciseGroupId === group.id &&
+                              styles.filterTextActive,
+                          ]}
+                        >
+                          {group.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  {!classificationReady && !error ? (
+                    <ActivityIndicator color={colors.accent} />
+                  ) : null}
+                </>
+              ) : null}
+              {exerciseSubdivisions.length || editingExercise ? (
+                <View style={styles.modalFilters}>
                   <Pressable
-                    key={item.id}
                     style={[
                       styles.filter,
-                      exerciseSubdivision === item.id && styles.filterActive,
+                      !exerciseSubdivision && styles.filterActive,
                     ]}
-                    onPress={() => setExerciseSubdivision(item.id)}
+                    onPress={() => setExerciseSubdivision(null)}
                   >
-                    <Text style={styles.filterText}>{item.name}</Text>
+                    <Text
+                      style={[
+                        styles.filterText,
+                        !exerciseSubdivision && styles.filterTextActive,
+                      ]}
+                    >
+                      Whole group
+                    </Text>
                   </Pressable>
-                ))}
-              </View>
-            ) : null}
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Pressable
-              style={styles.modalSave}
-              onPress={() => void saveExercise()}
-              disabled={saving || !exerciseName.trim()}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalSaveText}>
-                {saving ? 'Saving…' : 'Save Exercise'}
-              </Text>
-            </Pressable>
+                  {exerciseSubdivisions.map((item) => (
+                    <Pressable
+                      key={item.id}
+                      style={[
+                        styles.filter,
+                        exerciseSubdivision === item.id && styles.filterActive,
+                      ]}
+                      onPress={() => setExerciseSubdivision(item.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.filterText,
+                          exerciseSubdivision === item.id &&
+                            styles.filterTextActive,
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <Pressable
+                style={styles.modalSave}
+                onPress={() => void saveExercise()}
+                disabled={
+                  saving ||
+                  !exerciseName.trim() ||
+                  (editingExercise && !classificationReady)
+                }
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalSaveText}>
+                  {saving
+                    ? 'Saving…'
+                    : editingExercise
+                      ? 'Save Changes'
+                      : 'Save Exercise'}
+                </Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -772,6 +1111,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
   },
+  exerciseOpen: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: sizing.touchTarget,
+  },
+  exerciseAction: {
+    width: sizing.touchTarget,
+    height: sizing.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   exerciseName: {
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
@@ -800,6 +1152,12 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     paddingBottom: spacing.xxl,
   },
+  exerciseModalPanel: {
+    maxHeight: '85%',
+  },
+  exerciseModalBody: {
+    flexShrink: 1,
+  },
   modalHeading: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -815,6 +1173,17 @@ const styles = StyleSheet.create({
     height: sizing.touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalFieldLabel: {
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+    fontSize: typography.size.label,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  groupPicker: {
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   modalFilters: {
     flexDirection: 'row',

@@ -182,6 +182,26 @@ export function addSet(
   };
 }
 
+export function removeLastSet(
+  snapshot: SessionSnapshot,
+  exerciseId: string,
+  now: string,
+): SessionSnapshot {
+  const lastSet = snapshot.sets
+    .filter((set) => set.session_exercise_id === exerciseId)
+    .reduce<LoggedSetRow | null>(
+      (latest, set) =>
+        !latest || set.set_number > latest.set_number ? set : latest,
+      null,
+    );
+  if (!lastSet) throw new Error('This exercise has no set to remove.');
+  return {
+    ...snapshot,
+    sets: snapshot.sets.filter((set) => set.id !== lastSet.id),
+    session: { ...snapshot.session, updated_at: now },
+  };
+}
+
 export function setComments(
   snapshot: SessionSnapshot,
   comments: string,

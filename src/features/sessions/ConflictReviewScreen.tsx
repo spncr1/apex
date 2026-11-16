@@ -168,7 +168,9 @@ export function ConflictReviewScreen() {
     >
       <Pressable
         style={styles.back}
-        onPress={() => router.back()}
+        onPress={() =>
+          router.canGoBack() ? router.back() : router.replace('/(tabs)/plan')
+        }
         accessibilityRole="button"
       >
         <ArrowLeft color={colors.accent} size={20} />

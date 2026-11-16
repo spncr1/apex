@@ -51,10 +51,15 @@ function check(error: { message: string } | null) {
 function asTargets(
   exercises: PlannedExerciseRow[],
   sets: PlannedSetTargetRow[],
+  catalog: ExerciseRow[],
+  useCurrentNames: boolean,
 ): ExerciseTargetInput[] {
   return exercises.map((exercise) => ({
     exercise_id: exercise.exercise_id,
-    name: exercise.name_snapshot,
+    name: useCurrentNames
+      ? (catalog.find((item) => item.id === exercise.exercise_id)?.name ??
+        exercise.name_snapshot)
+      : exercise.name_snapshot,
     sets: sets
       .filter((set) => set.planned_exercise_id === exercise.id)
       .sort((a, b) => a.set_number - b.set_number)
@@ -131,6 +136,8 @@ async function fetchPlanning(
       exercises: asTargets(
         plannedExercises.filter((row) => row.planned_workout_id === plan.id),
         plannedSets,
+        catalog,
+        plan.status === 'planned',
       ),
     })),
   };

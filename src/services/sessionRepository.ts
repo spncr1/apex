@@ -1,10 +1,12 @@
 import { startOfWeek } from '../features/home/dates';
+import { loadConflictReviews, resolveConflict } from './conflictRepository';
 import { loadPlanning, type PlanDetail } from './planningRepository';
 import {
   cacheRemoteSession,
   findCachedSessionByPlan,
   forgetArchivedSession,
   getCachedSessionsForAccount,
+  getCachedSession,
   saveSessionEdit,
 } from '../features/sessions/sessionStore';
 import { syncPendingSessions } from '../features/sessions/sessionSync';
@@ -154,11 +156,79 @@ export async function loadWorkoutSession(
   return { plan, snapshot, syncState: 'clean', error: planning.error };
 }
 
+async function keepCurrentSessionEdit(
+  accountId: string,
+  snapshot: SessionSnapshot,
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const reviews = await loadConflictReviews(accountId, false);
+    const review = reviews.find(
+      (item) =>
+        item.status === 'pending' &&
+        item.localSessionId === snapshot.session.id,
+    );
+    if (!review) throw new Error('Could not find the saved session copies.');
+    const result = await resolveConflict(
+      accountId,
+      { ...review, localSnapshot: snapshot },
+      'local',
+    );
+    if (result === 'resolved') return;
+  }
+  throw new Error(
+    'The workout changed again. Your edits remain on this device.',
+  );
+}
+
 export async function persistWorkoutSession(
   accountId: string,
   snapshot: SessionSnapshot,
   online: boolean,
-) {
-  await saveSessionEdit(accountId, snapshot);
-  if (online) void syncPendingSessions(accountId);
+  keepCurrentEdit = false,
+): Promise<'clean' | 'pending'> {
+  if (keepCurrentEdit) {
+    const cached = await getCachedSession(accountId, snapshot.session.id);
+    if (cached?.syncState === 'conflict') {
+      if (!online)
+        throw new Error(
+          'Reconnect to save this workout. Your edits are still here.',
+        );
+      await keepCurrentSessionEdit(accountId, snapshot);
+      return 'clean';
+    }
+  }
+
+  try {
+    await saveSessionEdit(accountId, snapshot);
+  } catch (error) {
+    // An upload can mark a conflict after the cache check above.
+    if (
+      keepCurrentEdit &&
+      online &&
+      error instanceof Error &&
+      error.message === 'Resolve this session conflict before editing it.'
+    ) {
+      await keepCurrentSessionEdit(accountId, snapshot);
+      return 'clean';
+    }
+    throw error;
+  }
+  if (!online) return 'pending';
+  if (!keepCurrentEdit) {
+    void syncPendingSessions(accountId);
+    return 'pending';
+  }
+
+  // Save waits for any upload already running, then checks this workout's result.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await syncPendingSessions(accountId);
+    if (result.error) return 'pending';
+    const cached = await getCachedSession(accountId, snapshot.session.id);
+    if (cached?.syncState === 'conflict') {
+      await keepCurrentSessionEdit(accountId, cached.snapshot);
+      return 'clean';
+    }
+    if (cached?.syncState === 'clean') return 'clean';
+  }
+  return 'pending';
 }

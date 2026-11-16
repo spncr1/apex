@@ -32,10 +32,12 @@ export function AccountScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.content}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace('/(tabs)')
+          }
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to dashboard"
+          accessibilityLabel="Go back"
         >
           <ChevronLeft size={23} color={colors.textPrimary} />
           <Text style={styles.backText}>Back</Text>

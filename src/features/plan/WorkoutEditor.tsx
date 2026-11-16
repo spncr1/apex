@@ -43,13 +43,17 @@ export function WorkoutEditor({
   initial,
   catalog,
   onClose,
+  onOpenExercise,
   onSave,
+  visible = true,
 }: {
   title: string;
   initial: WorkoutEditorValue;
   catalog: ExerciseRow[];
   onClose: () => void;
+  onOpenExercise: (exerciseId: string) => void;
   onSave: (value: WorkoutEditorValue) => Promise<void>;
+  visible?: boolean;
 }) {
   const [name, setName] = useState(initial.name);
   const [goal, setGoal] = useState(initial.goal);
@@ -64,6 +68,7 @@ export function WorkoutEditor({
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hoveredExercise, setHoveredExercise] = useState<string | null>(null);
 
   function changeSet(
     exerciseId: string,
@@ -158,7 +163,7 @@ export function WorkoutEditor({
 
   return (
     <Modal
-      visible
+      visible={visible}
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}
@@ -222,7 +227,25 @@ export function WorkoutEditor({
           {exercises.map((exercise) => (
             <View key={exercise.exercise_id} style={styles.exerciseCard}>
               <View style={styles.exerciseHeading}>
-                <Text style={styles.exerciseName}>{exercise.name}</Text>
+                <Pressable
+                  style={styles.exerciseNameLink}
+                  onPress={() => onOpenExercise(exercise.exercise_id)}
+                  onHoverIn={() => setHoveredExercise(exercise.exercise_id)}
+                  onHoverOut={() => setHoveredExercise(null)}
+                  accessibilityRole="link"
+                  accessibilityLabel={`View ${exercise.name} exercise details`}
+                >
+                  <Text
+                    style={[
+                      styles.exerciseName,
+                      styles.exerciseNameLinkText,
+                      hoveredExercise === exercise.exercise_id &&
+                        styles.exerciseNameHovered,
+                    ]}
+                  >
+                    {exercise.name}
+                  </Text>
+                </Pressable>
                 <Pressable
                   style={styles.iconButton}
                   onPress={() =>
@@ -463,6 +486,16 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.semibold,
     fontSize: typography.size.body,
     flex: 1,
+  },
+  exerciseNameLink: {
+    flex: 1,
+    minHeight: sizing.touchTarget,
+    justifyContent: 'center',
+  },
+  exerciseNameLinkText: { flex: 0 },
+  exerciseNameHovered: {
+    color: colors.accent,
+    textDecorationLine: 'underline',
   },
   setRow: {
     flexDirection: 'row',

@@ -161,7 +161,7 @@ export function ProgressScreen() {
             style={styles.sessionRow}
             onPress={() =>
               router.push({
-                pathname: '/(tabs)/exercises/detail/[id]',
+                pathname: '/(tabs)/progress/exercise/[id]',
                 params: { id: best.exerciseId },
               })
             }

@@ -141,6 +141,17 @@ export function getCachedRead<T>(
   });
 }
 
+export function deleteCachedRead(accountId: string, key: string) {
+  return serial(async () => {
+    const db = await database();
+    await db.runAsync(
+      'delete from read_cache where account_id = ? and cache_key = ?',
+      accountId,
+      key,
+    );
+  });
+}
+
 export function saveSessionEdit(accountId: string, snapshot: SessionSnapshot) {
   validateOwner(accountId, snapshot);
   return serial(async () => {

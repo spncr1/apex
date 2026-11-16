@@ -79,8 +79,10 @@ function SetTable({ sets }: { sets: LoggedSetRow[] }) {
 
 export function ExerciseDetailScreen({
   exerciseId,
+  returnTo,
 }: {
   exerciseId: string | undefined;
+  returnTo?: 'plan' | 'progress';
 }) {
   const router = useRouter();
   const { accountId, status } = useAuth();
@@ -150,6 +152,18 @@ export function ExerciseDetailScreen({
   const last = detail?.history[0];
   const shown = all ? detail?.history : detail?.history.slice(0, 3);
 
+  function goBack() {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (returnTo === 'plan') {
+      router.replace('/(tabs)/plan');
+    } else if (returnTo === 'progress') {
+      router.replace('/(tabs)/progress');
+    } else {
+      router.replace('/(tabs)/exercises');
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView
@@ -158,7 +172,7 @@ export function ExerciseDetailScreen({
       >
         <View style={styles.top}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={goBack}
             style={styles.back}
             accessibilityRole="button"
             accessibilityLabel="Go back"

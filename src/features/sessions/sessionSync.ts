@@ -28,7 +28,7 @@ export interface SyncResult {
   error: string | null;
 }
 
-const syncingAccounts = new Set<string>();
+const syncingAccounts = new Map<string, Promise<SyncResult>>();
 
 function parseUploadResponse(value: unknown): UploadResponse {
   if (!value || typeof value !== 'object') {
@@ -54,14 +54,9 @@ function parseUploadResponse(value: unknown): UploadResponse {
   throw new Error('The session upload returned an invalid response.');
 }
 
-export async function syncPendingSessions(
-  accountId: string,
-): Promise<SyncResult> {
+async function runPendingSessionSync(accountId: string): Promise<SyncResult> {
   const result: SyncResult = { uploaded: 0, conflicts: 0, error: null };
   if (!supabase) return { ...result, error: 'Supabase is not configured.' };
-  if (syncingAccounts.has(accountId)) return result;
-
-  syncingAccounts.add(accountId);
   try {
     let upload = await nextPendingUpload(accountId);
     if (!upload) return result;
@@ -105,9 +100,19 @@ export async function syncPendingSessions(
       ...result,
       error: error instanceof Error ? error.message : 'Session sync failed.',
     };
-  } finally {
-    syncingAccounts.delete(accountId);
   }
+}
+
+export function syncPendingSessions(accountId: string): Promise<SyncResult> {
+  const active = syncingAccounts.get(accountId);
+  if (active) return active;
+  const running = runPendingSessionSync(accountId);
+  syncingAccounts.set(accountId, running);
+  void running.finally(() => {
+    if (syncingAccounts.get(accountId) === running)
+      syncingAccounts.delete(accountId);
+  });
+  return running;
 }
 
 export function startSessionSync(accountId: string) {

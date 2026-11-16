@@ -13,6 +13,7 @@ import { colors, radii, spacing, typography } from '../../src/theme/tokens';
 export default function TabLayout() {
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.bar,

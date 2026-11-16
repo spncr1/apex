@@ -1,13 +1,14 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowLeft,
   CheckCircle2,
   Clock3,
+  Minus,
   Pause,
   Play,
   Plus,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -33,8 +34,14 @@ import type { SessionSnapshot } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDay } from '../home/dates';
 import {
+  deleteCachedRead,
+  getCachedRead,
+  saveCachedRead,
+} from './sessionStore';
+import {
   activeMilliseconds,
   addSet,
+  removeLastSet,
   saveEditedSnapshot,
   finishSnapshot,
   isRunning,
@@ -46,6 +53,11 @@ import {
 } from './sessionEngine';
 
 type SetDraft = { reps: string; weight: string; notes: string };
+type SessionDraftCache = {
+  sessionId: string;
+  drafts: Record<string, SetDraft>;
+  comments: string;
+};
 const stamp = () => new Date().toISOString();
 const formatTimer = (milliseconds: number) => {
   const seconds = Math.floor(milliseconds / 1000);
@@ -68,9 +80,13 @@ export function SessionScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [now, setNow] = useState(stamp);
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
+  const draftsRef = useRef<Record<string, SetDraft>>({});
   const [comments, setCommentsDraft] = useState('');
+  const commentsRef = useRef('');
   const [editing, setEditing] = useState(false);
   const [editBase, setEditBase] = useState<SessionSnapshot | null>(null);
+  const busyRef = useRef(false);
+  const draftKey = `session-draft:${id}`;
 
   const reload = useCallback(async () => {
     if (!accountId || !id || !date) return;
@@ -82,24 +98,36 @@ export function SessionScreen() {
         date,
         status === 'offline',
       );
-      setLoaded(result);
-      setCommentsDraft(result.snapshot?.session.comments ?? '');
-      setDrafts(
-        Object.fromEntries(
-          (result.snapshot?.sets ?? []).map((set) => [
-            set.id,
-            {
-              reps: set.actual_reps === null ? '' : String(set.actual_reps),
-              weight:
-                set.actual_weight_kg === null
-                  ? ''
-                  : String(set.actual_weight_kg),
-              notes: set.notes ?? '',
-            },
-          ]),
-        ),
+      const savedDraft =
+        result.snapshot?.session.status === 'in_progress'
+          ? await getCachedRead<SessionDraftCache>(accountId, draftKey).catch(
+              () => null,
+            )
+          : null;
+      const matchingDraft =
+        savedDraft?.sessionId === result.snapshot?.session.id
+          ? savedDraft
+          : null;
+      const nextDrafts = Object.fromEntries(
+        (result.snapshot?.sets ?? []).map((set) => [
+          set.id,
+          matchingDraft?.drafts[set.id] ?? {
+            reps: set.actual_reps === null ? '' : String(set.actual_reps),
+            weight:
+              set.actual_weight_kg === null ? '' : String(set.actual_weight_kg),
+            notes: set.notes ?? '',
+          },
+        ]),
       );
+      const nextComments =
+        matchingDraft?.comments ?? result.snapshot?.session.comments ?? '';
+      draftsRef.current = nextDrafts;
+      commentsRef.current = nextComments;
+      setLoaded(result);
+      setDrafts(nextDrafts);
+      setCommentsDraft(nextComments);
       setMessage(result.error);
+      return result;
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Could not load session.',
@@ -107,11 +135,13 @@ export function SessionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [accountId, id, date, status]);
+  }, [accountId, id, date, status, draftKey]);
 
-  useEffect(() => {
-    void Promise.resolve().then(reload);
-  }, [reload]);
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
   useEffect(() => {
     const timer = setInterval(() => setNow(stamp()), 1000);
     return () => clearInterval(timer);
@@ -120,9 +150,7 @@ export function SessionScreen() {
   const snapshot = editing
     ? (editBase ?? loaded?.snapshot ?? null)
     : (loaded?.snapshot ?? null);
-  const editable =
-    (snapshot?.session.status === 'in_progress' || editing) &&
-    loaded?.syncState !== 'conflict';
+  const editable = snapshot?.session.status === 'in_progress' || editing;
   const running = snapshot ? isRunning(snapshot) : false;
   const exerciseCount =
     snapshot?.exercises.length ?? loaded?.plan?.exercises.length ?? 0;
@@ -134,33 +162,106 @@ export function SessionScreen() {
     ) ??
     0;
 
-  async function persist(next: SessionSnapshot) {
+  async function persist(next: SessionSnapshot, keepCurrentEdit = false) {
     if (!accountId) return;
-    await persistWorkoutSession(accountId, next, status === 'signed_in');
+    const syncState = await persistWorkoutSession(
+      accountId,
+      next,
+      status === 'signed_in',
+      keepCurrentEdit,
+    );
     setLoaded((current) =>
-      current ? { ...current, snapshot: next, syncState: 'pending' } : current,
+      current ? { ...current, snapshot: next, syncState } : current,
     );
   }
 
-  async function act(operation: () => SessionSnapshot) {
-    if (busy) return;
+  function showSaveError(error: unknown, fallback: string) {
+    if (
+      error instanceof Error &&
+      error.message === 'Resolve this session conflict before editing it.'
+    ) {
+      setLoaded((current) =>
+        current ? { ...current, syncState: 'conflict' } : current,
+      );
+      setMessage('Save your session edits to keep this workout version.');
+      return;
+    }
+    setMessage(error instanceof Error ? error.message : fallback);
+  }
+
+  async function act(
+    operation: () => SessionSnapshot,
+    clearDraft = false,
+    keepCurrentEdit = false,
+  ): Promise<boolean> {
+    if (busyRef.current) return false;
+    busyRef.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      await persist(operation());
+      await persist(operation(), keepCurrentEdit);
+      if (clearDraft && accountId)
+        await deleteCachedRead(accountId, draftKey).catch(() => {});
+      return true;
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'Could not save session.',
-      );
+      showSaveError(error, 'Could not save session.');
+      return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
-  function foldDrafts(base: SessionSnapshot): SessionSnapshot {
-    let next = setComments(base, comments, stamp());
+  function rememberDraft(
+    nextDrafts: Record<string, SetDraft>,
+    nextComments: string,
+    base = snapshot,
+  ) {
+    if (!accountId || !base || base.session.status !== 'in_progress') return;
+    const changedDrafts = Object.fromEntries(
+      base.sets
+        .filter((set) => {
+          const draft = nextDrafts[set.id];
+          if (!draft) return false;
+          const reps = draft.reps.trim();
+          const weight = draft.weight.trim();
+          const repsMatch = reps
+            ? /^\d+$/.test(reps) && Number(reps) === set.actual_reps
+            : set.actual_reps === null;
+          const weightMatch = weight
+            ? /^\d+(\.\d{1,2})?$/.test(weight) &&
+              Number(weight) === set.actual_weight_kg
+            : set.actual_weight_kg === null;
+          return (
+            !repsMatch ||
+            !weightMatch ||
+            (draft.notes.trim() || null) !== set.notes
+          );
+        })
+        .map((set) => [set.id, nextDrafts[set.id]]),
+    );
+    const operation =
+      Object.keys(changedDrafts).length ||
+      nextComments !== (base.session.comments ?? '')
+        ? saveCachedRead(accountId, draftKey, {
+            sessionId: base.session.id,
+            drafts: changedDrafts,
+            comments: nextComments,
+          } satisfies SessionDraftCache)
+        : deleteCachedRead(accountId, draftKey);
+    void operation.catch(() => {
+      setMessage('Could not keep a local draft. Tap Save before leaving.');
+    });
+  }
+
+  function foldDrafts(
+    base: SessionSnapshot,
+    exerciseId?: string,
+  ): SessionSnapshot {
+    let next = setComments(base, commentsRef.current, stamp());
     for (const set of base.sets) {
-      const draft = drafts[set.id];
+      if (exerciseId && set.session_exercise_id !== exerciseId) continue;
+      const draft = draftsRef.current[set.id];
       if (!draft) continue;
       const reps = draft.reps.trim();
       const weight = draft.weight.trim();
@@ -184,27 +285,54 @@ export function SessionScreen() {
     return next;
   }
 
-  function saveDrafts() {
-    if (!snapshot || snapshot.session.status !== 'in_progress' || !editable)
+  async function saveExerciseDrafts(exerciseId: string) {
+    if (!snapshot || !editable || busyRef.current) return;
+    let next: SessionSnapshot;
+    try {
+      next = foldDrafts(snapshot, exerciseId);
+      if (editing) next = saveEditedSnapshot(next, stamp());
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Could not save set entries.',
+      );
       return;
-    void act(() => foldDrafts(snapshot));
+    }
+    if (!(await act(() => next, false, true))) return;
+    if (editing) setEditBase(next);
+    else rememberDraft(draftsRef.current, commentsRef.current, next);
+  }
+
+  async function beginEdit() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const latest = await reload();
+      if (latest?.snapshot) {
+        setEditBase(latest.snapshot);
+        setEditing(true);
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   async function saveEdits() {
-    if (!snapshot || !editing || busy) return;
+    if (!snapshot || !editing || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      await persist(saveEditedSnapshot(foldDrafts(snapshot), stamp()));
+      await persist(saveEditedSnapshot(foldDrafts(snapshot), stamp()), true);
+      if (accountId)
+        await deleteCachedRead(accountId, draftKey).catch(() => {});
       setEditing(false);
       setEditBase(null);
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : 'Could not save session changes.',
-      );
+      showSaveError(error, 'Could not save session changes.');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -225,13 +353,66 @@ export function SessionScreen() {
         ? 'This will be partial because at least one exercise has no logged working set.'
         : 'Your logged workout will be marked complete.';
     if (Platform.OS === 'web') {
-      if (window.confirm(`Finish session?\n\n${detail}`)) void act(() => next);
+      if (window.confirm(`Finish session?\n\n${detail}`))
+        void act(() => next, true);
       return;
     }
     Alert.alert('Finish session?', detail, [
       { text: 'Keep logging', style: 'cancel' },
-      { text: 'Finish', onPress: () => void act(() => next) },
+      { text: 'Finish', onPress: () => void act(() => next, true) },
     ]);
+  }
+
+  async function removeExerciseSet(exerciseId: string) {
+    if (!snapshot || !editable || busyRef.current) return;
+    const lastSet = snapshot.sets
+      .filter((set) => set.session_exercise_id === exerciseId)
+      .sort((a, b) => b.set_number - a.set_number)[0];
+    if (!lastSet) return;
+    const draft = draftsRef.current[lastSet.id];
+    const hasEntries =
+      lastSet.actual_reps !== null ||
+      lastSet.actual_weight_kg !== null ||
+      !!lastSet.notes ||
+      !!draft?.reps ||
+      !!draft?.weight ||
+      !!draft?.notes;
+    if (hasEntries) {
+      const prompt = `Remove set ${lastSet.set_number} and its logged data?`;
+      const confirmed =
+        Platform.OS === 'web'
+          ? window.confirm(prompt)
+          : await new Promise<boolean>((resolve) =>
+              Alert.alert('Remove Set', prompt, [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => resolve(false),
+                },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: () => resolve(true),
+                },
+              ]),
+            );
+      if (!confirmed) return;
+    }
+    if (editing) {
+      setEditBase(removeLastSet(snapshot, exerciseId, stamp()));
+    } else {
+      const saved = await act(
+        () => removeLastSet(snapshot, exerciseId, stamp()),
+        false,
+        loaded?.syncState === 'conflict',
+      );
+      if (!saved) return;
+    }
+    const nextDrafts = { ...draftsRef.current };
+    delete nextDrafts[lastSet.id];
+    draftsRef.current = nextDrafts;
+    setDrafts(nextDrafts);
+    rememberDraft(nextDrafts, commentsRef.current);
   }
 
   function leaveSession() {
@@ -278,17 +459,6 @@ export function SessionScreen() {
               </Text>
             ) : null}
             {message ? <Text style={styles.message}>{message}</Text> : null}
-            {loaded?.syncState === 'conflict' ? (
-              <Pressable
-                onPress={() => router.push('/conflicts')}
-                accessibilityRole="button"
-                style={styles.conflictLink}
-              >
-                <Text style={styles.message}>
-                  This session has a sync conflict. Review both versions.
-                </Text>
-              </Pressable>
-            ) : null}
             {!loaded?.plan && !snapshot ? (
               <Text style={styles.message}>
                 This workout is not available in the saved plan. Open Plan while
@@ -318,7 +488,8 @@ export function SessionScreen() {
                   <Play color={colors.textOnAccent} />
                   <Text style={styles.primaryText}>Start</Text>
                 </Pressable>
-              ) : snapshot?.session.status === 'in_progress' && editable ? (
+              ) : snapshot?.session.status === 'in_progress' &&
+                loaded?.syncState !== 'conflict' ? (
                 <Pressable
                   style={styles.primary}
                   disabled={busy}
@@ -342,9 +513,7 @@ export function SessionScreen() {
                 </Pressable>
               ) : null}
             </View>
-            {snapshot &&
-            snapshot.session.status !== 'in_progress' &&
-            loaded?.syncState !== 'conflict' ? (
+            {snapshot && snapshot.session.status !== 'in_progress' ? (
               <Pressable
                 style={styles.editButton}
                 onPress={() => {
@@ -353,8 +522,7 @@ export function SessionScreen() {
                     setEditBase(null);
                     void reload();
                   } else {
-                    setEditBase(snapshot);
-                    setEditing(true);
+                    void beginEdit();
                   }
                 }}
                 accessibilityRole="button"
@@ -372,9 +540,12 @@ export function SessionScreen() {
                     multiline
                     maxLength={500}
                     value={comments}
-                    onChangeText={setCommentsDraft}
-                    onBlur={saveDrafts}
-                    editable={editable}
+                    onChangeText={(value) => {
+                      commentsRef.current = value;
+                      setCommentsDraft(value);
+                      rememberDraft(draftsRef.current, value);
+                    }}
+                    editable={editable && !busy}
                     placeholder="Add notes for this workout..."
                     placeholderTextColor={colors.textMuted}
                     style={styles.commentsInput}
@@ -390,8 +561,15 @@ export function SessionScreen() {
                     </Text>
                     <View style={styles.tableHead}>
                       <Text style={styles.setCol}>Set</Text>
-                      <Text style={styles.numberCol}>Reps</Text>
-                      <Text style={styles.numberCol}>Weight (kg)</Text>
+                      <Text style={[styles.numericHeading, styles.repsCol]}>
+                        Reps
+                      </Text>
+                      <Text
+                        style={[styles.numericHeading, styles.weightCol]}
+                        numberOfLines={1}
+                      >
+                        Weight (kg)
+                      </Text>
                       <Text style={styles.noteCol}>Notes</Text>
                     </View>
                     {snapshot.sets
@@ -403,11 +581,18 @@ export function SessionScreen() {
                           weight: '',
                           notes: '',
                         };
-                        const change = (values: Partial<SetDraft>) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [set.id]: { ...draft, ...values },
-                          }));
+                        const change = (values: Partial<SetDraft>) => {
+                          const nextDrafts = {
+                            ...draftsRef.current,
+                            [set.id]: {
+                              ...(draftsRef.current[set.id] ?? draft),
+                              ...values,
+                            },
+                          };
+                          draftsRef.current = nextDrafts;
+                          setDrafts(nextDrafts);
+                          rememberDraft(nextDrafts, commentsRef.current);
+                        };
                         return (
                           <View key={set.id} style={styles.setBlock}>
                             <View style={styles.setRow}>
@@ -415,24 +600,30 @@ export function SessionScreen() {
                                 {set.set_number}
                               </Text>
                               <TextInput
-                                style={[styles.input, styles.numberInput]}
+                                style={[
+                                  styles.input,
+                                  styles.numberInput,
+                                  styles.repsInput,
+                                ]}
                                 value={draft.reps}
                                 onChangeText={(value) =>
                                   change({ reps: value })
                                 }
-                                onBlur={saveDrafts}
-                                editable={editable}
+                                editable={editable && !busy}
                                 keyboardType="number-pad"
                                 accessibilityLabel={`Set ${set.set_number} reps`}
                               />
                               <TextInput
-                                style={[styles.input, styles.numberInput]}
+                                style={[
+                                  styles.input,
+                                  styles.numberInput,
+                                  styles.weightInput,
+                                ]}
                                 value={draft.weight}
                                 onChangeText={(value) =>
                                   change({ weight: value })
                                 }
-                                onBlur={saveDrafts}
-                                editable={editable}
+                                editable={editable && !busy}
                                 keyboardType="decimal-pad"
                                 accessibilityLabel={`Set ${set.set_number} weight in kilograms`}
                               />
@@ -442,8 +633,7 @@ export function SessionScreen() {
                                 onChangeText={(value) =>
                                   change({ notes: value })
                                 }
-                                onBlur={saveDrafts}
-                                editable={editable}
+                                editable={editable && !busy}
                                 placeholder="Notes"
                                 placeholderTextColor={colors.textMuted}
                                 accessibilityLabel={`Set ${set.set_number} notes`}
@@ -453,29 +643,52 @@ export function SessionScreen() {
                         );
                       })}
                     {editable ? (
-                      <Pressable
-                        style={styles.addButton}
-                        disabled={busy}
-                        onPress={() => {
-                          const change = () =>
-                            addSet(foldDrafts(snapshot), exercise.id, stamp());
-                          if (editing) {
-                            try {
-                              setEditBase(change());
-                            } catch (issue) {
-                              setMessage(
-                                issue instanceof Error
-                                  ? issue.message
-                                  : 'Could not add set.',
+                      <View style={styles.setActions}>
+                        <Pressable
+                          style={styles.addButton}
+                          disabled={busy}
+                          onPress={() => {
+                            const change = () =>
+                              addSet(snapshot, exercise.id, stamp());
+                            if (editing) setEditBase(change());
+                            else
+                              void act(
+                                change,
+                                false,
+                                loaded?.syncState === 'conflict',
                               );
-                            }
-                          } else void act(change);
-                        }}
-                        accessibilityRole="button"
-                      >
-                        <Plus color={colors.accent} size={20} />
-                        <Text style={styles.addText}>Add Set</Text>
-                      </Pressable>
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Add Set"
+                        >
+                          <Plus color={colors.accent} size={20} />
+                          <Text style={styles.addText}>Add Set</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.removeButton}
+                          disabled={
+                            busy ||
+                            !snapshot.sets.some(
+                              (set) => set.session_exercise_id === exercise.id,
+                            )
+                          }
+                          onPress={() => void removeExerciseSet(exercise.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove last set"
+                        >
+                          <Minus color={colors.danger} size={20} />
+                          <Text style={styles.removeText}>Remove Set</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.saveSetButton}
+                          disabled={busy}
+                          onPress={() => void saveExerciseDrafts(exercise.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Save session entries"
+                        >
+                          <Text style={styles.saveSetText}>Save</Text>
+                        </Pressable>
+                      </View>
                     ) : null}
                   </View>
                 ))}
@@ -512,7 +725,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontFamily: typography.family.semibold,
   },
-  conflictLink: { minHeight: sizing.touchTarget, justifyContent: 'center' },
   safe: { flex: 1, backgroundColor: colors.background },
   top: {
     alignItems: 'center',
@@ -646,15 +858,15 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
   },
-  numberCol: {
-    flex: 1,
-    minWidth: 0,
+  numericHeading: {
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
     textAlign: 'center',
   },
+  repsCol: { width: 44 },
+  weightCol: { width: 80, marginLeft: -8, marginRight: -8, fontSize: 13 },
   noteCol: {
-    flex: 1.4,
+    flex: 1,
     minWidth: 0,
     color: colors.textPrimary,
     fontFamily: typography.family.semibold,
@@ -688,20 +900,53 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     paddingHorizontal: spacing.sm,
   },
-  numberInput: { flex: 1, minWidth: 0, textAlign: 'center' },
-  notesInput: { flex: 1.4, minWidth: 0 },
+  numberInput: { textAlign: 'center' },
+  repsInput: { width: 44 },
+  weightInput: { width: 64 },
+  notesInput: { flex: 1, minWidth: 0 },
+  setActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
   addButton: {
     minHeight: sizing.touchTarget,
     borderWidth: 1,
     borderColor: colors.accent,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: spacing.xs,
   },
   addText: { color: colors.accent, fontFamily: typography.family.semibold },
+  removeButton: {
+    minHeight: sizing.touchTarget,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  removeText: { color: colors.danger, fontFamily: typography.family.semibold },
+  saveSetButton: {
+    minHeight: sizing.touchTarget,
+    minWidth: 60,
+    marginLeft: 'auto',
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveSetText: {
+    color: colors.textOnAccent,
+    fontFamily: typography.family.semibold,
+  },
   finish: {
     minHeight: 58,
     backgroundColor: colors.accent,

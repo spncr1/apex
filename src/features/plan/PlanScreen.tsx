@@ -68,6 +68,7 @@ export function PlanScreen() {
   const [result, setResult] = useState<PlanningLoadResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<EditorSelection | null>(null);
+  const [editorHidden, setEditorHidden] = useState(false);
   const [actionPlan, setActionPlan] = useState<PlanDetail | null>(null);
   const [swapCandidates, setSwapCandidates] = useState<PlannedWorkoutRow[]>([]);
   const [goalDraft, setGoalDraft] = useState('');
@@ -83,6 +84,7 @@ export function PlanScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setEditorHidden(false);
       if (!accountId) return;
       let active = true;
       setLoading(true);
@@ -474,7 +476,15 @@ export function PlanScreen() {
           }
           initial={initialEditorValue(editor)}
           catalog={snapshot.catalog}
+          visible={!editorHidden}
           onClose={() => setEditor(null)}
+          onOpenExercise={(id) => {
+            setEditorHidden(true);
+            router.push({
+              pathname: '/(tabs)/plan/exercise/[id]',
+              params: { id },
+            });
+          }}
           onSave={saveEditor}
         />
       ) : null}
