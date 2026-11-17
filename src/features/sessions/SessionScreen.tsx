@@ -78,6 +78,12 @@ export function SessionScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<{
+    exerciseId: string | null;
+    text: string;
+  } | null>(null);
+  const [savingExerciseId, setSavingExerciseId] = useState<string | null>(null);
+  const [savingEdits, setSavingEdits] = useState(false);
   const [now, setNow] = useState(stamp);
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
   const draftsRef = useRef<Record<string, SetDraft>>({});
@@ -173,6 +179,7 @@ export function SessionScreen() {
     setLoaded((current) =>
       current ? { ...current, snapshot: next, syncState } : current,
     );
+    return syncState;
   }
 
   function showSaveError(error: unknown, fallback: string) {
@@ -193,16 +200,16 @@ export function SessionScreen() {
     operation: () => SessionSnapshot,
     clearDraft = false,
     keepCurrentEdit = false,
-  ): Promise<boolean> {
+  ): Promise<'clean' | 'pending' | false> {
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      await persist(operation(), keepCurrentEdit);
+      const syncState = await persist(operation(), keepCurrentEdit);
       if (clearDraft && accountId)
         await deleteCachedRead(accountId, draftKey).catch(() => {});
-      return true;
+      return syncState ?? false;
     } catch (error) {
       showSaveError(error, 'Could not save session.');
       return false;
@@ -297,7 +304,18 @@ export function SessionScreen() {
       );
       return;
     }
-    if (!(await act(() => next, false, true))) return;
+    setSavingExerciseId(exerciseId);
+    setSaveNotice(null);
+    const syncState = await act(() => next, false, true);
+    setSavingExerciseId(null);
+    if (!syncState) return;
+    setSaveNotice({
+      exerciseId,
+      text:
+        syncState === 'clean'
+          ? 'Saved and synced.'
+          : 'Saved on this device. Sync pending.',
+    });
     if (editing) setEditBase(next);
     else rememberDraft(draftsRef.current, commentsRef.current, next);
   }
@@ -322,9 +340,22 @@ export function SessionScreen() {
     if (!snapshot || !editing || busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
+    setSavingEdits(true);
+    setSaveNotice(null);
     setMessage(null);
     try {
-      await persist(saveEditedSnapshot(foldDrafts(snapshot), stamp()), true);
+      const syncState = await persist(
+        saveEditedSnapshot(foldDrafts(snapshot), stamp()),
+        true,
+      );
+      if (syncState)
+        setSaveNotice({
+          exerciseId: null,
+          text:
+            syncState === 'clean'
+              ? 'Session changes saved and synced.'
+              : 'Session changes saved on this device. Sync pending.',
+        });
       if (accountId)
         await deleteCachedRead(accountId, draftKey).catch(() => {});
       setEditing(false);
@@ -334,6 +365,7 @@ export function SessionScreen() {
     } finally {
       busyRef.current = false;
       setBusy(false);
+      setSavingEdits(false);
     }
   }
 
@@ -459,6 +491,11 @@ export function SessionScreen() {
               </Text>
             ) : null}
             {message ? <Text style={styles.message}>{message}</Text> : null}
+            {saveNotice?.exerciseId === null ? (
+              <Text style={styles.saveNotice} accessibilityLiveRegion="polite">
+                {saveNotice.text}
+              </Text>
+            ) : null}
             {!loaded?.plan && !snapshot ? (
               <Text style={styles.message}>
                 This workout is not available in the saved plan. Open Plan while
@@ -543,6 +580,7 @@ export function SessionScreen() {
                     onChangeText={(value) => {
                       commentsRef.current = value;
                       setCommentsDraft(value);
+                      setSaveNotice(null);
                       rememberDraft(draftsRef.current, value);
                     }}
                     editable={editable && !busy}
@@ -591,6 +629,7 @@ export function SessionScreen() {
                           };
                           draftsRef.current = nextDrafts;
                           setDrafts(nextDrafts);
+                          setSaveNotice(null);
                           rememberDraft(nextDrafts, commentsRef.current);
                         };
                         return (
@@ -643,52 +682,77 @@ export function SessionScreen() {
                         );
                       })}
                     {editable ? (
-                      <View style={styles.setActions}>
-                        <Pressable
-                          style={styles.addButton}
-                          disabled={busy}
-                          onPress={() => {
-                            const change = () =>
-                              addSet(snapshot, exercise.id, stamp());
-                            if (editing) setEditBase(change());
-                            else
-                              void act(
-                                change,
-                                false,
-                                loaded?.syncState === 'conflict',
-                              );
-                          }}
-                          accessibilityRole="button"
-                          accessibilityLabel="Add Set"
-                        >
-                          <Plus color={colors.accent} size={20} />
-                          <Text style={styles.addText}>Add Set</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.removeButton}
-                          disabled={
-                            busy ||
-                            !snapshot.sets.some(
-                              (set) => set.session_exercise_id === exercise.id,
-                            )
-                          }
-                          onPress={() => void removeExerciseSet(exercise.id)}
-                          accessibilityRole="button"
-                          accessibilityLabel="Remove last set"
-                        >
-                          <Minus color={colors.danger} size={20} />
-                          <Text style={styles.removeText}>Remove Set</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.saveSetButton}
-                          disabled={busy}
-                          onPress={() => void saveExerciseDrafts(exercise.id)}
-                          accessibilityRole="button"
-                          accessibilityLabel="Save session entries"
-                        >
-                          <Text style={styles.saveSetText}>Save</Text>
-                        </Pressable>
-                      </View>
+                      <>
+                        <View style={styles.setActions}>
+                          <Pressable
+                            style={styles.addButton}
+                            disabled={busy}
+                            onPress={() => {
+                              setSaveNotice(null);
+                              const change = () =>
+                                addSet(snapshot, exercise.id, stamp());
+                              if (editing) setEditBase(change());
+                              else
+                                void act(
+                                  change,
+                                  false,
+                                  loaded?.syncState === 'conflict',
+                                );
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Add Set"
+                          >
+                            <Plus color={colors.accent} size={20} />
+                            <Text style={styles.addText}>Add Set</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.removeButton}
+                            disabled={
+                              busy ||
+                              !snapshot.sets.some(
+                                (set) =>
+                                  set.session_exercise_id === exercise.id,
+                              )
+                            }
+                            onPress={() => {
+                              setSaveNotice(null);
+                              void removeExerciseSet(exercise.id);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Remove last set"
+                          >
+                            <Minus color={colors.danger} size={20} />
+                            <Text style={styles.removeText}>Remove Set</Text>
+                          </Pressable>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.saveSetButton,
+                              (pressed || savingExerciseId === exercise.id) &&
+                                styles.savePressed,
+                            ]}
+                            disabled={busy}
+                            onPress={() => void saveExerciseDrafts(exercise.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Save session entries"
+                          >
+                            <Text style={styles.saveSetText}>
+                              {savingExerciseId === exercise.id
+                                ? 'Saving…'
+                                : saveNotice?.exerciseId === exercise.id
+                                  ? 'Saved'
+                                  : 'Save'}
+                            </Text>
+                          </Pressable>
+                        </View>
+                        {saveNotice?.exerciseId === exercise.id ? (
+                          <Text
+                            style={styles.saveNotice}
+                            accessibilityLiveRegion="polite"
+                          >
+                            {saveNotice.text}
+                          </Text>
+                        ) : null}
+                      </>
                     ) : null}
                   </View>
                 ))}
@@ -697,14 +761,21 @@ export function SessionScreen() {
           </ScrollView>
           {editable ? (
             <Pressable
-              style={styles.finish}
+              style={({ pressed }) => [
+                styles.finish,
+                (pressed || savingEdits) && styles.savePressed,
+              ]}
               disabled={busy}
               onPress={editing ? () => void saveEdits() : finish}
               accessibilityRole="button"
             >
               <CheckCircle2 color={colors.textOnAccent} size={27} />
               <Text style={styles.finishText}>
-                {editing ? 'Save Changes' : 'Finish Session'}
+                {savingEdits
+                  ? 'Saving…'
+                  : editing
+                    ? 'Save Changes'
+                    : 'Finish Session'}
               </Text>
             </Pressable>
           ) : null}
@@ -946,6 +1017,12 @@ const styles = StyleSheet.create({
   saveSetText: {
     color: colors.textOnAccent,
     fontFamily: typography.family.semibold,
+  },
+  savePressed: { opacity: 0.65 },
+  saveNotice: {
+    color: colors.success,
+    fontFamily: typography.family.semibold,
+    marginTop: spacing.sm,
   },
   finish: {
     minHeight: 58,
