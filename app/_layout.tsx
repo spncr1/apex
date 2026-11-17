@@ -31,6 +31,7 @@ function AppRoutes() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="account" />
           <Stack.Screen name="session/[id]" />
+          <Stack.Screen name="session/exercise/[id]" />
           <Stack.Screen name="conflicts" />
         </Stack.Protected>
       </Stack>

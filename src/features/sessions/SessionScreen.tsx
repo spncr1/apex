@@ -83,6 +83,9 @@ export function SessionScreen() {
     text: string;
   } | null>(null);
   const [savingExerciseId, setSavingExerciseId] = useState<string | null>(null);
+  const [hoveredExerciseId, setHoveredExerciseId] = useState<string | null>(
+    null,
+  );
   const [savingEdits, setSavingEdits] = useState(false);
   const [now, setNow] = useState(stamp);
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
@@ -455,6 +458,25 @@ export function SessionScreen() {
     }
   }
 
+  async function openExercise(exerciseId: string) {
+    if (accountId && snapshot?.session.status === 'in_progress') {
+      try {
+        await saveCachedRead(accountId, draftKey, {
+          sessionId: snapshot.session.id,
+          drafts: draftsRef.current,
+          comments: commentsRef.current,
+        } satisfies SessionDraftCache);
+      } catch {
+        setMessage('Could not keep a local draft. Tap Save before leaving.');
+        return;
+      }
+    }
+    router.push({
+      pathname: '/session/exercise/[id]',
+      params: { id: exerciseId },
+    });
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.top}>
@@ -594,9 +616,29 @@ export function SessionScreen() {
                 {snapshot.exercises.map((exercise, index) => (
                   <View key={exercise.id} style={styles.exercise}>
                     <Text style={styles.eyebrow}>EXERCISE #{index + 1}</Text>
-                    <Text style={styles.exerciseName}>
-                      {exercise.name_snapshot}
-                    </Text>
+                    <Pressable
+                      style={styles.exerciseNameLink}
+                      disabled={busy}
+                      onPress={() => void openExercise(exercise.exercise_id)}
+                      onHoverIn={() => setHoveredExerciseId(exercise.id)}
+                      onHoverOut={() => setHoveredExerciseId(null)}
+                      accessibilityRole="link"
+                      accessibilityLabel={
+                        'View ' + exercise.name_snapshot + ' exercise details'
+                      }
+                    >
+                      {({ pressed }) => (
+                        <Text
+                          style={[
+                            styles.exerciseName,
+                            (pressed || hoveredExerciseId === exercise.id) &&
+                              styles.exerciseNameActive,
+                          ]}
+                        >
+                          {exercise.name_snapshot}
+                        </Text>
+                      )}
+                    </Pressable>
                     <View style={styles.tableHead}>
                       <Text style={styles.setCol}>Set</Text>
                       <Text style={[styles.numericHeading, styles.repsCol]}>
@@ -758,27 +800,27 @@ export function SessionScreen() {
                 ))}
               </>
             ) : null}
+            {editable ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.finish,
+                  (pressed || savingEdits) && styles.savePressed,
+                ]}
+                disabled={busy}
+                onPress={editing ? () => void saveEdits() : finish}
+                accessibilityRole="button"
+              >
+                <CheckCircle2 color={colors.textOnAccent} size={27} />
+                <Text style={styles.finishText}>
+                  {savingEdits
+                    ? 'Saving…'
+                    : editing
+                      ? 'Save Changes'
+                      : 'Finish Session'}
+                </Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
-          {editable ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.finish,
-                (pressed || savingEdits) && styles.savePressed,
-              ]}
-              disabled={busy}
-              onPress={editing ? () => void saveEdits() : finish}
-              accessibilityRole="button"
-            >
-              <CheckCircle2 color={colors.textOnAccent} size={27} />
-              <Text style={styles.finishText}>
-                {savingEdits
-                  ? 'Saving…'
-                  : editing
-                    ? 'Save Changes'
-                    : 'Finish Session'}
-              </Text>
-            </Pressable>
-          ) : null}
         </>
       )}
     </SafeAreaView>
@@ -917,6 +959,16 @@ const styles = StyleSheet.create({
     fontSize: 22,
     marginTop: spacing.xs,
   },
+  exerciseNameLink: {
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    maxWidth: '100%',
+    minHeight: sizing.touchTarget,
+  },
+  exerciseNameActive: {
+    color: colors.accent,
+    textDecorationLine: 'underline',
+  },
   tableHead: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1028,7 +1080,7 @@ const styles = StyleSheet.create({
     minHeight: 58,
     backgroundColor: colors.accent,
     borderRadius: radii.lg,
-    margin: spacing.lg,
+    marginTop: spacing.xl,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

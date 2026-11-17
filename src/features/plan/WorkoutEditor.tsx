@@ -235,16 +235,18 @@ export function WorkoutEditor({
                   accessibilityRole="link"
                   accessibilityLabel={`View ${exercise.name} exercise details`}
                 >
-                  <Text
-                    style={[
-                      styles.exerciseName,
-                      styles.exerciseNameLinkText,
-                      hoveredExercise === exercise.exercise_id &&
-                        styles.exerciseNameHovered,
-                    ]}
-                  >
-                    {exercise.name}
-                  </Text>
+                  {({ pressed }) => (
+                    <Text
+                      style={[
+                        styles.exerciseName,
+                        styles.exerciseNameLinkText,
+                        (pressed || hoveredExercise === exercise.exercise_id) &&
+                          styles.exerciseNameHovered,
+                      ]}
+                    >
+                      {exercise.name}
+                    </Text>
+                  )}
                 </Pressable>
                 <Pressable
                   style={styles.iconButton}
