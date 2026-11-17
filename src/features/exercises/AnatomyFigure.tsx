@@ -6,6 +6,11 @@ import bodyPaths from '../../../assets/anatomy/anatome-body-paths.json';
 import { colors, radii, spacing, typography } from '../../theme/tokens';
 
 type BodyView = 'front' | 'back';
+
+const viewBoxes: Record<BodyView, string> = {
+  front: '60 120 604 1208',
+  back: '795 120 604 1208',
+};
 type AnatomyPath = {
   slug: string;
   path: { left?: string[]; right?: string[] };
@@ -126,7 +131,7 @@ export function AnatomyFigure({
         </View>
       ) : null}
       <Svg
-        viewBox="60 120 604 1208"
+        viewBox={viewBoxes[view]}
         width="100%"
         height={320}
         accessibilityLabel={`${groupName} anatomy`}
