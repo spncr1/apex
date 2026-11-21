@@ -32,6 +32,7 @@ import {
 } from '../sessions/sessionStore';
 import { supabase } from '../../services/supabase';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import type {
   ExerciseRow,
   MuscleGroupRow,
@@ -68,6 +69,7 @@ export function MuscleGroupScreen({
   groupId: string | undefined;
 }) {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [data, setData] = useState<GroupData | null>(null);
   const [groupOptions, setGroupOptions] = useState<MuscleGroupRow[]>([]);
@@ -562,7 +564,12 @@ export function MuscleGroupScreen({
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          desktop && styles.desktopContent,
+        ]}
+      >
         <AccountButton style={styles.accountButton} />
         <Pressable
           style={styles.back}
@@ -953,6 +960,13 @@ export function MuscleGroupScreen({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', padding: spacing.lg, paddingBottom: 100 },
+  desktopContent: {
+    maxWidth: 1220,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
   accountButton: { top: spacing.lg, right: spacing.lg },
   back: {
     flexDirection: 'row',

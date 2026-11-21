@@ -15,6 +15,7 @@ import { ScreenFrame } from '../../components/ScreenFrame';
 import { getCachedRead, saveCachedRead } from '../sessions/sessionStore';
 import { supabase } from '../../services/supabase';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import type { ExerciseRow, MuscleGroupRow } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -25,6 +26,7 @@ interface CatalogSnapshot {
 
 export function ExercisesScreen() {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
   const [search, setSearch] = useState('');
@@ -205,26 +207,38 @@ export function ExercisesScreen() {
           {query ? 'No matching muscle groups.' : 'No muscle groups yet.'}
         </Text>
       ) : null}
-      {groups.map((group) => {
-        const exercises =
-          catalog?.exercises.filter(
-            (exercise) => exercise.muscle_group_id === group.id,
-          ) ?? [];
-        return (
-          <Pressable
-            key={group.id}
-            style={styles.groupCard}
-            onPress={() => router.push(`/(tabs)/exercises/${group.id}`)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${group.name} muscle group`}
-          >
-            <Dumbbell size={25} color={colors.accent} />
-            <Text style={styles.groupName}>{group.name}</Text>
-            <Text style={styles.groupCount}>{exercises.length} exercises</Text>
-            <ChevronRight size={21} color={colors.textPrimary} />
-          </Pressable>
-        );
-      })}
+      <View style={desktop && styles.desktopGroupGrid}>
+        {groups.map((group) => {
+          const exercises =
+            catalog?.exercises.filter(
+              (exercise) => exercise.muscle_group_id === group.id,
+            ) ?? [];
+          return (
+            <Pressable
+              key={group.id}
+              style={({ hovered }) => [
+                styles.groupCard,
+                desktop && styles.desktopGroupCard,
+                hovered && desktop && styles.desktopGroupHovered,
+              ]}
+              onPress={() => router.push(`/(tabs)/exercises/${group.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${group.name} muscle group`}
+            >
+              <Dumbbell size={25} color={colors.accent} />
+              <Text
+                style={[styles.groupName, desktop && styles.desktopGroupName]}
+              >
+                {group.name}
+              </Text>
+              <Text style={styles.groupCount}>
+                {exercises.length} exercises
+              </Text>
+              <ChevronRight size={21} color={colors.textPrimary} />
+            </Pressable>
+          );
+        })}
+      </View>
       <Modal
         visible={addGroup}
         transparent
@@ -274,6 +288,21 @@ export function ExercisesScreen() {
 }
 
 const styles = StyleSheet.create({
+  desktopGroupGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
+  desktopGroupCard: {
+    width: '23%',
+    minHeight: 174,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    marginBottom: 0,
+  },
+  desktopGroupHovered: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.accent,
+  },
+  desktopGroupName: { flex: 0 },
   searchActions: {
     flexDirection: 'row',
     alignItems: 'center',

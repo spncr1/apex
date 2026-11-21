@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, typography } from '../theme/tokens';
+import { useDesktopLayout } from '../theme/useDesktopLayout';
 import { AccountButton } from './AccountButton';
 import { ApexBrand } from './ApexBrand';
 
@@ -17,10 +18,16 @@ export function ScreenFrame({
   subtitle: string;
   children: ReactNode;
 }) {
+  const desktop = useDesktopLayout();
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <ApexBrand />
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          desktop && styles.desktopContent,
+        ]}
+      >
+        {!desktop && <ApexBrand />}
         <AccountButton style={styles.accountButton} />
         <View style={styles.eyebrowRow}>
           <View style={styles.eyebrowMark} />
@@ -43,6 +50,13 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   accountButton: { right: spacing.lg },
+  desktopContent: {
+    maxWidth: 1220,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrowMark: {
     width: 5,

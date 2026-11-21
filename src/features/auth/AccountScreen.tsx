@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApexBrand } from '../../components/ApexBrand';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import { useAuth } from './AuthProvider';
 
 export function AccountScreen() {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { session, status, signOut } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.content}>
+      <View style={[styles.content, desktop && styles.desktopContent]}>
         <Pressable
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace('/(tabs)')
@@ -85,6 +87,12 @@ export function AccountScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { flex: 1, padding: spacing.xl, paddingTop: spacing.lg },
+  desktopContent: {
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+    paddingTop: spacing.xxl,
+  },
   backButton: {
     position: 'absolute',
     top: spacing.lg,

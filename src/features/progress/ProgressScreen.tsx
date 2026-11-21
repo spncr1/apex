@@ -25,11 +25,13 @@ import {
   type ProgressPeriod,
 } from '../../services/progressRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import { useAuth } from '../auth/AuthProvider';
 import { dateKey, formatSessionDate } from '../home/dates';
 
 export function ProgressScreen() {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [period, setPeriod] = useState<ProgressPeriod>('week');
   const [offset, setOffset] = useState(0);
@@ -129,103 +131,118 @@ export function ProgressScreen() {
       ) : null}
       {loading && !data ? <ActivityIndicator color={colors.accent} /> : null}
       <View style={styles.grid}>
-        <View style={styles.metric}>
+        <View style={[styles.metric, desktop && styles.desktopMetric]}>
           <Dumbbell color={colors.accent} size={25} />
           <Text style={styles.value}>{data?.completedCount ?? 0}</Text>
           <Text style={styles.label}>Completed sessions</Text>
         </View>
-        <View style={styles.metric}>
+        <View style={[styles.metric, desktop && styles.desktopMetric]}>
           <Clock3 color={colors.accent} size={25} />
           <Text style={styles.value}>{data?.activeMinutes ?? 0} min</Text>
           <Text style={styles.label}>Active time</Text>
         </View>
-        <View style={styles.metric}>
+        <View style={[styles.metric, desktop && styles.desktopMetric]}>
           <ListChecks color={colors.accent} size={25} />
           <Text style={styles.value}>{data?.totalExercises ?? 0}</Text>
           <Text style={styles.label}>Total exercises</Text>
         </View>
-        <View style={styles.metric}>
+        <View style={[styles.metric, desktop && styles.desktopMetric]}>
           <Layers3 color={colors.accent} size={25} />
           <Text style={styles.value}>{data?.loggedSets ?? 0}</Text>
           <Text style={styles.label}>Logged sets</Text>
         </View>
       </View>
-      <View style={styles.sectionHeading}>
-        <Trophy color={colors.accent} size={24} />
-        <Text style={styles.sectionTitle}>Personal Records</Text>
-      </View>
-      {visibleBests.length ? (
-        visibleBests.map((best) => (
-          <Pressable
-            key={best.exerciseId}
-            style={styles.sessionRow}
-            onPress={() =>
-              router.push({
-                pathname: '/(tabs)/progress/exercise/[id]',
-                params: { id: best.exerciseId },
-              })
-            }
-            accessibilityRole="button"
-            accessibilityLabel={'Open ' + best.name}
-          >
-            <View style={styles.sessionText}>
-              <Text style={styles.sessionName}>{best.name}</Text>
-              <Text style={styles.sessionDate}>
-                {formatSessionDate(best.performedAt)}
-              </Text>
-            </View>
-            <Text style={styles.bestValue}>
-              {best.weightKg} kg × {best.reps} reps
+      <View style={desktop && styles.desktopLists}>
+        <View style={desktop && styles.desktopListColumn}>
+          <View style={styles.sectionHeading}>
+            <Trophy color={colors.accent} size={24} />
+            <Text style={styles.sectionTitle}>Personal Records</Text>
+          </View>
+          {visibleBests.length ? (
+            visibleBests.map((best) => (
+              <Pressable
+                key={best.exerciseId}
+                style={styles.sessionRow}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/progress/exercise/[id]',
+                    params: { id: best.exerciseId },
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={'Open ' + best.name}
+              >
+                <View style={styles.sessionText}>
+                  <Text style={styles.sessionName}>{best.name}</Text>
+                  <Text style={styles.sessionDate}>
+                    {formatSessionDate(best.performedAt)}
+                  </Text>
+                </View>
+                <Text style={styles.bestValue}>
+                  {best.weightKg} kg × {best.reps} reps
+                </Text>
+                <ChevronRight color={colors.accent} size={20} />
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.empty}>
+              {period === 'all'
+                ? 'No personal records logged yet.'
+                : 'No new weight records in this period.'}
             </Text>
-            <ChevronRight color={colors.accent} size={20} />
-          </Pressable>
-        ))
-      ) : (
-        <Text style={styles.empty}>
-          {period === 'all'
-            ? 'No personal records logged yet.'
-            : 'No new weight records in this period.'}
-        </Text>
-      )}
-      <Text style={styles.sectionTitle}>Sessions</Text>
-      {data?.recent.length ? (
-        data.recent.map((item) => (
-          <Pressable
-            key={item.session.id}
-            style={styles.sessionRow}
-            onPress={() =>
-              router.push({
-                pathname: '/session/[id]',
-                params: {
-                  id: item.session.planned_workout_id,
-                  date: item.plannedDate,
-                },
-              })
-            }
-            accessibilityRole="button"
-            accessibilityLabel={'Open ' + item.name + ' session'}
-          >
-            <View style={styles.sessionText}>
-              <Text style={styles.sessionName}>{item.name}</Text>
-              <Text style={styles.sessionDate}>
-                {formatSessionDate(
-                  item.session.finished_at ?? item.session.started_at,
-                )}{' '}
-                · {item.session.status}
-              </Text>
-            </View>
-            <Text style={styles.sessionMeta}>{item.setCount} sets</Text>
-            <ChevronRight color={colors.textPrimary} size={20} />
-          </Pressable>
-        ))
-      ) : (
-        <Text style={styles.empty}>No finished sessions in this period.</Text>
-      )}
+          )}
+        </View>
+        <View style={desktop && styles.desktopListColumn}>
+          <Text style={styles.sectionTitle}>Sessions</Text>
+          {data?.recent.length ? (
+            data.recent.map((item) => (
+              <Pressable
+                key={item.session.id}
+                style={styles.sessionRow}
+                onPress={() =>
+                  router.push({
+                    pathname: '/session/[id]',
+                    params: {
+                      id: item.session.planned_workout_id,
+                      date: item.plannedDate,
+                    },
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={'Open ' + item.name + ' session'}
+              >
+                <View style={styles.sessionText}>
+                  <Text style={styles.sessionName}>{item.name}</Text>
+                  <Text style={styles.sessionDate}>
+                    {formatSessionDate(
+                      item.session.finished_at ?? item.session.started_at,
+                    )}{' '}
+                    · {item.session.status}
+                  </Text>
+                </View>
+                <Text style={styles.sessionMeta}>{item.setCount} sets</Text>
+                <ChevronRight color={colors.textPrimary} size={20} />
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.empty}>
+              No finished sessions in this period.
+            </Text>
+          )}
+        </View>
+      </View>
     </ScreenFrame>
   );
 }
 
 const styles = StyleSheet.create({
+  desktopMetric: { width: '23%', flex: 1, minWidth: 0 },
+  desktopLists: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xl,
+  },
+  desktopListColumn: { flex: 1, minWidth: 0 },
   filters: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
   filter: {
     minHeight: sizing.touchTarget,

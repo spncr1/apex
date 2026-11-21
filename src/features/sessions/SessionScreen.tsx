@@ -30,6 +30,7 @@ import {
   type SessionLoad,
 } from '../../services/sessionRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import type { SessionSnapshot } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDay } from '../home/dates';
@@ -73,6 +74,7 @@ const formatTimer = (milliseconds: number) => {
 export function SessionScreen() {
   const { id, date } = useLocalSearchParams<{ id: string; date: string }>();
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [loaded, setLoaded] = useState<SessionLoad | null>(null);
   const [loading, setLoading] = useState(true);
@@ -496,7 +498,10 @@ export function SessionScreen() {
       ) : (
         <>
           <ScrollView
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[
+              styles.content,
+              desktop && styles.desktopContent,
+            ]}
             keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.eyebrow}>WORKOUT SESSION</Text>
@@ -859,6 +864,13 @@ const styles = StyleSheet.create({
   },
   loader: { marginTop: spacing.xxl },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  desktopContent: {
+    width: '100%',
+    maxWidth: 1220,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+  },
   eyebrow: {
     color: colors.textMuted,
     fontFamily: typography.family.semibold,

@@ -8,9 +8,12 @@ import {
 } from 'react-native';
 
 import { colors, radii, sizing, spacing } from '../theme/tokens';
+import { useDesktopLayout } from '../theme/useDesktopLayout';
 
 export function AccountButton({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter();
+  const desktop = useDesktopLayout();
+  if (desktop) return null;
 
   return (
     <Pressable

@@ -7,22 +7,36 @@ import {
   UsersRound,
 } from 'lucide-react-native';
 import { StyleSheet } from 'react-native';
+import { PlatformPressable } from 'expo-router/build/react-navigation/elements';
 
 import { colors, radii, spacing, typography } from '../../src/theme/tokens';
+import { useDesktopLayout } from '../../src/theme/useDesktopLayout';
 
 export default function TabLayout() {
+  const desktop = useDesktopLayout();
   return (
     <Tabs
       backBehavior="history"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.bar,
-        tabBarItemStyle: styles.item,
+        tabBarStyle: desktop ? styles.desktopBar : styles.bar,
+        tabBarItemStyle: desktop ? undefined : styles.item,
         tabBarLabelStyle: styles.label,
         tabBarActiveTintColor: colors.textOnAccent,
         tabBarInactiveTintColor: colors.textPrimary,
         tabBarActiveBackgroundColor: colors.accent,
+        tabBarButton: (props) => (
+          <PlatformPressable
+            {...props}
+            hoverEffect={
+              props['aria-selected']
+                ? undefined
+                : { color: colors.surfaceElevated, hoverOpacity: 1 }
+            }
+          />
+        ),
         tabBarHideOnKeyboard: true,
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       <Tabs.Screen
@@ -73,6 +87,7 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  desktopBar: { display: 'none' },
   bar: {
     height: 82,
     marginHorizontal: spacing.sm,

@@ -32,6 +32,7 @@ import {
   type ExerciseDetailLoad,
 } from '../../services/exerciseDetailRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import type { LoggedSetRow } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDay } from '../home/dates';
@@ -85,6 +86,7 @@ export function ExerciseDetailScreen({
   returnTo?: 'plan' | 'progress';
 }) {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [detail, setDetail] = useState<ExerciseDetailLoad | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,7 +169,10 @@ export function ExerciseDetailScreen({
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          desktop && styles.desktopContent,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.top}>
@@ -431,6 +436,14 @@ export function ExerciseDetailScreen({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: 80 },
+  desktopContent: {
+    width: '100%',
+    maxWidth: 1220,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
   top: {
     alignItems: 'center',
     marginBottom: spacing.sm,

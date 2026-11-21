@@ -33,6 +33,7 @@ import {
   type PlanningLoadResult,
 } from '../../services/planningRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import type { PlannedWorkoutRow } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 import {
@@ -62,6 +63,10 @@ function initialEditorValue(selection: EditorSelection): WorkoutEditorValue {
 
 export function PlanScreen() {
   const router = useRouter();
+  const desktop = useDesktopLayout();
+  const [selectedDayIndex, setSelectedDayIndex] = useState(
+    () => (new Date().getDay() + 6) % 7,
+  );
   const { accountId, status } = useAuth();
   const [weekOffset, setWeekOffset] = useState(0);
   const [reloadVersion, setReloadVersion] = useState(0);
@@ -336,133 +341,205 @@ export function PlanScreen() {
               <ChevronRight color={colors.textPrimary} />
             </Pressable>
           </View>
-          {Array.from({ length: 7 }, (_, index) => {
-            const day = addDays(monday, index);
-            const dayKey = dateKey(day);
-            const dayPlans = snapshot.plans.filter(
-              (detail) => detail.plan.planned_date === dayKey,
-            );
-            return (
-              <View key={dayKey} style={styles.daySection}>
-                <View style={styles.dayHeader}>
-                  <Text style={styles.dayTitle}>{formatDay(day)}</Text>
-                  <Pressable
-                    style={[styles.addDayButton, offline && styles.disabled]}
-                    disabled={offline}
-                    onPress={() => {
-                      setActionError(null);
-                      setEditor({
-                        kind: 'new_for_date',
-                        date: dayKey,
-                        id: Crypto.randomUUID(),
-                      });
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add workout on ${formatDay(day)}`}
-                  >
-                    <Plus size={16} color={colors.accent} />
-                    <Text style={styles.addDayText}>Add workout</Text>
-                  </Pressable>
-                </View>
-                {dayPlans.length ? (
-                  dayPlans.map((detail) => (
-                    <View key={detail.plan.id} style={styles.workoutRow}>
-                      <Dumbbell size={22} color={colors.accent} />
-                      <View style={styles.workoutText}>
-                        <Text style={styles.workoutName}>
-                          {detail.plan.name_snapshot}
-                        </Text>
-                        <Text style={styles.meta}>
-                          {detail.exercises.length} exercises ·{' '}
-                          {detail.plan.status.replace('_', ' ')}
-                          {detail.plan.is_overridden ? ' · edited' : ''}
-                        </Text>
-                      </View>
-                      {detail.plan.status === 'planned' ||
-                      detail.plan.status === 'in_progress' ? (
-                        <Pressable
-                          style={styles.editButton}
-                          onPress={() =>
-                            router.push({
-                              pathname: '/session/[id]',
-                              params: {
-                                id: detail.plan.id,
-                                date: detail.plan.planned_date,
-                              },
-                            })
-                          }
-                          accessibilityRole="button"
-                          accessibilityLabel={`${detail.plan.status === 'planned' ? 'Open' : 'Continue'} ${detail.plan.name_snapshot} session`}
-                        >
-                          <Text style={styles.editText}>
-                            {detail.plan.status === 'planned'
-                              ? 'Start'
-                              : 'Continue'}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                      {detail.plan.status === 'planned' && !offline ? (
-                        <Pressable
-                          style={styles.editButton}
-                          onPress={() => setEditor({ kind: 'plan', detail })}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Edit ${detail.plan.name_snapshot} on ${formatDay(day)}`}
-                        >
-                          <Text style={styles.editText}>Edit</Text>
-                        </Pressable>
-                      ) : null}
-                      {detail.plan.status === 'completed' ||
-                      detail.plan.status === 'partial' ? (
-                        <Pressable
-                          style={styles.editButton}
-                          onPress={() =>
-                            router.push({
-                              pathname: '/session/[id]',
-                              params: {
-                                id: detail.plan.id,
-                                date: detail.plan.planned_date,
-                              },
-                            })
-                          }
-                          accessibilityRole="button"
-                          accessibilityLabel={`View ${detail.plan.name_snapshot} finished workout`}
-                        >
-                          <Text style={styles.editText}>View</Text>
-                        </Pressable>
-                      ) : null}
-                      {(detail.plan.status === 'completed' ||
-                        detail.plan.status === 'partial') &&
-                      !offline ? (
-                        <Pressable
-                          style={styles.editButton}
-                          disabled={busy}
-                          onPress={() => void removeFinished(detail)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove ${detail.plan.name_snapshot} finished workout`}
-                        >
-                          <Text style={styles.removeText}>Remove</Text>
-                        </Pressable>
-                      ) : null}
-                      {detail.plan.status === 'planned' && !offline ? (
-                        <Pressable
-                          style={styles.editButton}
-                          onPress={() => {
-                            void openActions(detail);
-                          }}
-                          accessibilityRole="button"
-                          accessibilityLabel={`More actions for ${detail.plan.name_snapshot}`}
-                        >
-                          <MoreHorizontal size={22} color={colors.accent} />
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.empty}>No workout scheduled</Text>
-                )}
+          <View style={desktop && styles.desktopSchedule}>
+            {desktop && (
+              <View style={styles.desktopDayList}>
+                {Array.from({ length: 7 }, (_, index) => {
+                  const day = addDays(monday, index);
+                  const dayPlans = snapshot.plans.filter(
+                    (detail) => detail.plan.planned_date === dateKey(day),
+                  );
+                  return (
+                    <Pressable
+                      key={dateKey(day)}
+                      onPress={() => setSelectedDayIndex(index)}
+                      style={({ hovered }) => [
+                        styles.desktopDayButton,
+                        selectedDayIndex === index && styles.desktopDaySelected,
+                        hovered &&
+                          selectedDayIndex !== index &&
+                          styles.desktopDayHovered,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected: selectedDayIndex === index,
+                      }}
+                      accessibilityLabel={`Show ${formatDay(day)} workouts`}
+                    >
+                      <Text style={styles.desktopDayTitle}>
+                        {formatDay(day)}
+                      </Text>
+                      <Text style={styles.desktopDaySummary} numberOfLines={1}>
+                        {dayPlans.length
+                          ? dayPlans
+                              .map((detail) => detail.plan.name_snapshot)
+                              .join(' · ')
+                          : 'No workout scheduled'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            );
-          })}
+            )}
+            <View style={desktop && styles.desktopDayDetails}>
+              {(desktop
+                ? [selectedDayIndex]
+                : Array.from({ length: 7 }, (_, index) => index)
+              ).map((index) => {
+                const day = addDays(monday, index);
+                const dayKey = dateKey(day);
+                const dayPlans = snapshot.plans.filter(
+                  (detail) => detail.plan.planned_date === dayKey,
+                );
+                return (
+                  <View key={dayKey} style={styles.daySection}>
+                    <View style={styles.dayHeader}>
+                      <Text style={styles.dayTitle}>{formatDay(day)}</Text>
+                      <Pressable
+                        style={[
+                          styles.addDayButton,
+                          offline && styles.disabled,
+                        ]}
+                        disabled={offline}
+                        onPress={() => {
+                          setActionError(null);
+                          setEditor({
+                            kind: 'new_for_date',
+                            date: dayKey,
+                            id: Crypto.randomUUID(),
+                          });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add workout on ${formatDay(day)}`}
+                      >
+                        <Plus size={16} color={colors.accent} />
+                        <Text style={styles.addDayText}>Add workout</Text>
+                      </Pressable>
+                    </View>
+                    {dayPlans.length ? (
+                      dayPlans.map((detail) => (
+                        <View key={detail.plan.id}>
+                          <View style={styles.workoutRow}>
+                            <Dumbbell size={22} color={colors.accent} />
+                            <View style={styles.workoutText}>
+                              <Text style={styles.workoutName}>
+                                {detail.plan.name_snapshot}
+                              </Text>
+                              <Text style={styles.meta}>
+                                {detail.exercises.length} exercises ·{' '}
+                                {detail.plan.status.replace('_', ' ')}
+                                {detail.plan.is_overridden ? ' · edited' : ''}
+                              </Text>
+                            </View>
+                            {detail.plan.status === 'planned' ||
+                            detail.plan.status === 'in_progress' ? (
+                              <Pressable
+                                style={styles.editButton}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/session/[id]',
+                                    params: {
+                                      id: detail.plan.id,
+                                      date: detail.plan.planned_date,
+                                    },
+                                  })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`${detail.plan.status === 'planned' ? 'Open' : 'Continue'} ${detail.plan.name_snapshot} session`}
+                              >
+                                <Text style={styles.editText}>
+                                  {detail.plan.status === 'planned'
+                                    ? 'Start'
+                                    : 'Continue'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                            {detail.plan.status === 'planned' && !offline ? (
+                              <Pressable
+                                style={styles.editButton}
+                                onPress={() =>
+                                  setEditor({ kind: 'plan', detail })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit ${detail.plan.name_snapshot} on ${formatDay(day)}`}
+                              >
+                                <Text style={styles.editText}>Edit</Text>
+                              </Pressable>
+                            ) : null}
+                            {detail.plan.status === 'completed' ||
+                            detail.plan.status === 'partial' ? (
+                              <Pressable
+                                style={styles.editButton}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/session/[id]',
+                                    params: {
+                                      id: detail.plan.id,
+                                      date: detail.plan.planned_date,
+                                    },
+                                  })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`View ${detail.plan.name_snapshot} finished workout`}
+                              >
+                                <Text style={styles.editText}>View</Text>
+                              </Pressable>
+                            ) : null}
+                            {(detail.plan.status === 'completed' ||
+                              detail.plan.status === 'partial') &&
+                            !offline ? (
+                              <Pressable
+                                style={styles.editButton}
+                                disabled={busy}
+                                onPress={() => void removeFinished(detail)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Remove ${detail.plan.name_snapshot} finished workout`}
+                              >
+                                <Text style={styles.removeText}>Remove</Text>
+                              </Pressable>
+                            ) : null}
+                            {detail.plan.status === 'planned' && !offline ? (
+                              <Pressable
+                                style={styles.editButton}
+                                onPress={() => {
+                                  void openActions(detail);
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel={`More actions for ${detail.plan.name_snapshot}`}
+                              >
+                                <MoreHorizontal
+                                  size={22}
+                                  color={colors.accent}
+                                />
+                              </Pressable>
+                            ) : null}
+                          </View>
+                          {desktop && detail.exercises.length > 0 && (
+                            <View style={styles.desktopExercisePreview}>
+                              <Text style={styles.desktopPreviewTitle}>
+                                Planned exercises
+                              </Text>
+                              {detail.exercises.map((exercise) => (
+                                <Text
+                                  key={exercise.exercise_id}
+                                  style={styles.desktopPreviewExercise}
+                                >
+                                  {exercise.name} · {exercise.sets.length}{' '}
+                                  {exercise.sets.length === 1 ? 'set' : 'sets'}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.empty}>No workout scheduled</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
         </>
       ) : null}
 
@@ -505,6 +582,54 @@ export function PlanScreen() {
 }
 
 const styles = StyleSheet.create({
+  desktopSchedule: {
+    flexDirection: 'row',
+    gap: spacing.xl,
+    alignItems: 'flex-start',
+  },
+  desktopDayList: { width: 260, gap: spacing.sm },
+  desktopDayDetails: { flex: 1, minWidth: 0 },
+  desktopDayButton: {
+    minHeight: 64,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+  },
+  desktopDaySelected: { borderColor: colors.accent, borderLeftWidth: 5 },
+  desktopDayHovered: { backgroundColor: colors.surfaceElevated },
+  desktopDayTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.family.semibold,
+    fontSize: typography.size.label,
+  },
+  desktopExercisePreview: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  desktopPreviewTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.family.semibold,
+    fontSize: typography.size.label,
+    marginBottom: spacing.sm,
+  },
+  desktopPreviewExercise: {
+    color: colors.textMuted,
+    fontFamily: typography.family.regular,
+    fontSize: typography.size.label,
+    paddingVertical: spacing.xs,
+  },
+  desktopDaySummary: {
+    color: colors.textMuted,
+    fontFamily: typography.family.regular,
+    fontSize: 12,
+    marginTop: spacing.xs,
+  },
   error: {
     color: colors.danger,
     fontFamily: typography.family.regular,

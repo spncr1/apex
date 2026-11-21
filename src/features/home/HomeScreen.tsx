@@ -30,6 +30,7 @@ import { ApexBrand } from '../../components/ApexBrand';
 import { useAuth } from '../auth/AuthProvider';
 import { loadHome, type HomeLoadResult } from '../../services/homeRepository';
 import { colors, radii, sizing, spacing, typography } from '../../theme/tokens';
+import { useDesktopLayout } from '../../theme/useDesktopLayout';
 import {
   addDays,
   dateKey,
@@ -66,6 +67,7 @@ function Metric({
 
 export function HomeScreen() {
   const router = useRouter();
+  const desktop = useDesktopLayout();
   const { accountId, status } = useAuth();
   const [weekOffset, setWeekOffset] = useState(0);
   const [result, setResult] = useState<HomeLoadResult | null>(null);
@@ -145,7 +147,10 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          desktop && styles.desktopContent,
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -154,19 +159,28 @@ export function HomeScreen() {
           />
         }
       >
-        <View style={styles.heroArea}>
+        <View style={[styles.heroArea, desktop && styles.desktopHeroArea]}>
+          {desktop && (
+            <View pointerEvents="none" style={styles.desktopHeroPlaceholder} />
+          )}
           <View pointerEvents="none" style={styles.heroSlashOne} />
           <View pointerEvents="none" style={styles.heroSlashTwo} />
           <AccountButton />
-          <ApexBrand />
-          <Text style={styles.brandSub}>TRAIN / LOG / PROGRESS</Text>
-          <Text style={styles.greeting}>
+          {!desktop && (
+            <>
+              <ApexBrand />
+              <Text style={styles.brandSub}>TRAIN / LOG / PROGRESS</Text>
+            </>
+          )}
+          <Text style={[styles.greeting, desktop && styles.desktopGreeting]}>
             Good{' '}
             <Text style={styles.greetingAccent}>
               {greetingFor(today)},{'\n'}Spencer.
             </Text>
           </Text>
-          <Text style={styles.subGreeting}>Here’s your week at a glance.</Text>
+          <Text style={[styles.subGreeting, desktop && styles.desktopGreeting]}>
+            Here’s your week at a glance.
+          </Text>
         </View>
 
         {status === 'offline' || result?.isCached ? (
@@ -182,193 +196,208 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <View style={styles.weekHeading}>
-          <Pressable
-            onPress={() => setWeekOffset((current) => current - 1)}
-            style={styles.weekArrow}
-            accessibilityRole="button"
-            accessibilityLabel="Previous week"
-          >
-            <ChevronLeft size={25} color={colors.textPrimary} />
-          </Pressable>
-          <View style={styles.weekTitleBlock}>
-            <Text style={styles.weekTitle}>{formatWeekRange(weekStart)}</Text>
-            <Text style={styles.weekSubtitle}>{weekStart.getFullYear()}</Text>
-          </View>
-          <Pressable
-            onPress={() => setWeekOffset((current) => current + 1)}
-            style={styles.weekArrow}
-            accessibilityRole="button"
-            accessibilityLabel="Next week"
-          >
-            <ChevronRight size={25} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.weekStrip}
-        >
-          {weekDays.map((day) => {
-            const key = dateKey(day);
-            const dayPlans =
-              data?.plans.filter((plan) => plan.planned_date === key) ?? [];
-            const isToday = key === todayKey;
-            const hasCompleted = dayPlans.some(
-              (plan) => data?.sessionStatusByPlan?.[plan.id] === 'completed',
-            );
-            const hasPlanned = dayPlans.some((plan) =>
-              ['planned', 'in_progress', 'partial'].includes(
-                data?.sessionStatusByPlan?.[plan.id] ?? plan.status,
-              ),
-            );
-            return (
-              <Pressable
-                key={key}
-                style={[styles.dayCard, isToday && styles.dayCardToday]}
-                onPress={() => setSelectedDay(day)}
-                accessibilityRole="button"
-                accessibilityLabel={`${formatDay(day)}, ${dayPlans.length} workouts`}
-              >
-                <Text style={[styles.dayName, isToday && styles.dayTextToday]}>
-                  {new Intl.DateTimeFormat('en-AU', {
-                    weekday: 'short',
-                  }).format(day)}
-                </Text>
-                <Text
-                  style={[styles.dayNumber, isToday && styles.dayTextToday]}
-                >
-                  {day.getDate()}
-                </Text>
-                {hasCompleted ? (
-                  <View style={styles.completedDot}>
-                    <Check
-                      size={15}
-                      color={colors.textOnAccent}
-                      strokeWidth={3}
-                    />
-                  </View>
-                ) : hasPlanned ? (
-                  <Dumbbell
-                    size={20}
-                    color={isToday ? colors.textOnAccent : colors.accent}
-                  />
-                ) : (
-                  <Circle
-                    size={17}
-                    color={isToday ? colors.textOnAccent : colors.textMuted}
-                  />
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.todayCard}>
-          <View pointerEvents="none" style={styles.cardSlash} />
-          <View style={styles.todayContent}>
-            <Text style={styles.eyebrow}>
-              {weekOffset === 0 ? 'TODAY’S WORKOUT' : 'THIS WEEK’S WORKOUTS'}
-            </Text>
-            <Text style={styles.todayTitle}>
-              {visiblePlans?.length
-                ? visiblePlans.length === 1
-                  ? visiblePlans[0].name_snapshot
-                  : `${visiblePlans.length} workouts planned`
-                : 'No workout planned'}
-            </Text>
-            <Text style={styles.todayDetail}>
-              {visiblePlans?.length === 1
-                ? `${data?.exerciseCountByPlan[visiblePlans[0].id] ?? 0} exercises`
-                : visiblePlans?.length
-                  ? visiblePlans.map((plan) => plan.name_snapshot).join(' • ')
-                  : 'No workouts scheduled for this period.'}
-            </Text>
+        <View style={desktop && styles.desktopWeekSection}>
+          <View style={styles.weekHeading}>
             <Pressable
-              style={styles.primaryButton}
-              onPress={() => {
-                if (
-                  visiblePlans?.length === 1 &&
-                  ['planned', 'in_progress'].includes(visiblePlans[0].status)
-                )
-                  router.push({
-                    pathname: '/session/[id]',
-                    params: {
-                      id: visiblePlans[0].id,
-                      date: visiblePlans[0].planned_date,
-                    },
-                  });
-                else if (
-                  weekOffset === 0 &&
-                  visiblePlans &&
-                  visiblePlans.length > 1
-                )
-                  setSelectedDay(today);
-                else router.push('/(tabs)/plan');
-              }}
+              onPress={() => setWeekOffset((current) => current - 1)}
+              style={styles.weekArrow}
               accessibilityRole="button"
-              accessibilityLabel={
-                visiblePlans?.length === 1
-                  ? 'Open workout session'
-                  : 'Open workout plan'
-              }
+              accessibilityLabel="Previous week"
             >
-              <CalendarDays size={23} color={colors.textOnAccent} />
-              <Text style={styles.primaryButtonText}>
-                {visiblePlans?.length === 1 &&
-                ['planned', 'in_progress'].includes(visiblePlans[0].status)
-                  ? visiblePlans[0].status === 'in_progress'
-                    ? 'Resume Session'
-                    : 'Start Session'
-                  : visiblePlans?.length
-                    ? 'View Workouts'
-                    : 'Open Plan'}
-              </Text>
+              <ChevronLeft size={25} color={colors.textPrimary} />
+            </Pressable>
+            <View style={styles.weekTitleBlock}>
+              <Text style={styles.weekTitle}>{formatWeekRange(weekStart)}</Text>
+              <Text style={styles.weekSubtitle}>{weekStart.getFullYear()}</Text>
+            </View>
+            <Pressable
+              onPress={() => setWeekOffset((current) => current + 1)}
+              style={styles.weekArrow}
+              accessibilityRole="button"
+              accessibilityLabel="Next week"
+            >
+              <ChevronRight size={25} color={colors.textPrimary} />
             </Pressable>
           </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.weekStrip,
+              desktop && styles.desktopWeekStrip,
+            ]}
+          >
+            {weekDays.map((day) => {
+              const key = dateKey(day);
+              const dayPlans =
+                data?.plans.filter((plan) => plan.planned_date === key) ?? [];
+              const isToday = key === todayKey;
+              const hasCompleted = dayPlans.some(
+                (plan) => data?.sessionStatusByPlan?.[plan.id] === 'completed',
+              );
+              const hasPlanned = dayPlans.some((plan) =>
+                ['planned', 'in_progress', 'partial'].includes(
+                  data?.sessionStatusByPlan?.[plan.id] ?? plan.status,
+                ),
+              );
+              return (
+                <Pressable
+                  key={key}
+                  style={[
+                    styles.dayCard,
+                    desktop && styles.desktopDayCard,
+                    isToday && styles.dayCardToday,
+                  ]}
+                  onPress={() => setSelectedDay(day)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${formatDay(day)}, ${dayPlans.length} workouts`}
+                >
+                  <Text
+                    style={[styles.dayName, isToday && styles.dayTextToday]}
+                  >
+                    {new Intl.DateTimeFormat('en-AU', {
+                      weekday: 'short',
+                    }).format(day)}
+                  </Text>
+                  <Text
+                    style={[styles.dayNumber, isToday && styles.dayTextToday]}
+                  >
+                    {day.getDate()}
+                  </Text>
+                  {hasCompleted ? (
+                    <View style={styles.completedDot}>
+                      <Check
+                        size={15}
+                        color={colors.textOnAccent}
+                        strokeWidth={3}
+                      />
+                    </View>
+                  ) : hasPlanned ? (
+                    <Dumbbell
+                      size={20}
+                      color={isToday ? colors.textOnAccent : colors.accent}
+                    />
+                  ) : (
+                    <Circle
+                      size={17}
+                      color={isToday ? colors.textOnAccent : colors.textMuted}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
 
-        <View style={styles.goalCard}>
-          <View style={styles.sectionHeading}>
-            <View style={styles.sectionHeadingLeft}>
-              <Target size={27} color={colors.accent} />
-              <Text style={styles.sectionTitle}>Weekly Goal</Text>
+        <View style={desktop && styles.desktopSummaryRow}>
+          <View
+            style={[styles.todayCard, desktop && styles.desktopSummaryCard]}
+          >
+            <View pointerEvents="none" style={styles.cardSlash} />
+            <View style={styles.todayContent}>
+              <Text style={styles.eyebrow}>
+                {weekOffset === 0 ? 'TODAY’S WORKOUT' : 'THIS WEEK’S WORKOUTS'}
+              </Text>
+              <Text style={styles.todayTitle}>
+                {visiblePlans?.length
+                  ? visiblePlans.length === 1
+                    ? visiblePlans[0].name_snapshot
+                    : `${visiblePlans.length} workouts planned`
+                  : 'No workout planned'}
+              </Text>
+              <Text style={styles.todayDetail}>
+                {visiblePlans?.length === 1
+                  ? `${data?.exerciseCountByPlan[visiblePlans[0].id] ?? 0} exercises`
+                  : visiblePlans?.length
+                    ? visiblePlans.map((plan) => plan.name_snapshot).join(' • ')
+                    : 'No workouts scheduled for this period.'}
+              </Text>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => {
+                  if (
+                    visiblePlans?.length === 1 &&
+                    ['planned', 'in_progress'].includes(visiblePlans[0].status)
+                  )
+                    router.push({
+                      pathname: '/session/[id]',
+                      params: {
+                        id: visiblePlans[0].id,
+                        date: visiblePlans[0].planned_date,
+                      },
+                    });
+                  else if (
+                    weekOffset === 0 &&
+                    visiblePlans &&
+                    visiblePlans.length > 1
+                  )
+                    setSelectedDay(today);
+                  else router.push('/(tabs)/plan');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  visiblePlans?.length === 1
+                    ? 'Open workout session'
+                    : 'Open workout plan'
+                }
+              >
+                <CalendarDays size={23} color={colors.textOnAccent} />
+                <Text style={styles.primaryButtonText}>
+                  {visiblePlans?.length === 1 &&
+                  ['planned', 'in_progress'].includes(visiblePlans[0].status)
+                    ? visiblePlans[0].status === 'in_progress'
+                      ? 'Resume Session'
+                      : 'Start Session'
+                    : visiblePlans?.length
+                      ? 'View Workouts'
+                      : 'Open Plan'}
+                </Text>
+              </Pressable>
             </View>
-            <Text style={styles.goalCount}>
-              {goal === null ? (
-                'Set a goal in Plan'
-              ) : (
-                <>
-                  <Text style={styles.accentText}>{completed}</Text> / {goal}
-                </>
-              )}
-            </Text>
           </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
-          <View style={styles.metricsRow}>
-            <Metric
-              icon={Dumbbell}
-              value={String(completed)}
-              label="Completed sessions"
-            />
-            <Metric
-              icon={Clock3}
-              value={formatDuration(data?.activeMinutes ?? 0)}
-              label="Active time"
-            />
-            <Metric
-              icon={ListChecks}
-              value={String(data?.totalExercises ?? 0)}
-              label="Total exercises"
-            />
-            <Metric
-              icon={Layers3}
-              value={String(data?.loggedSets ?? 0)}
-              label="Logged sets"
-            />
+
+          <View style={[styles.goalCard, desktop && styles.desktopSummaryCard]}>
+            <View style={styles.sectionHeading}>
+              <View style={styles.sectionHeadingLeft}>
+                <Target size={27} color={colors.accent} />
+                <Text style={styles.sectionTitle}>Weekly Goal</Text>
+              </View>
+              <Text style={styles.goalCount}>
+                {goal === null ? (
+                  'Set a goal in Plan'
+                ) : (
+                  <>
+                    <Text style={styles.accentText}>{completed}</Text> / {goal}
+                  </>
+                )}
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            </View>
+            <View style={styles.metricsRow}>
+              <Metric
+                icon={Dumbbell}
+                value={String(completed)}
+                label="Completed sessions"
+              />
+              <Metric
+                icon={Clock3}
+                value={formatDuration(data?.activeMinutes ?? 0)}
+                label="Active time"
+              />
+              <Metric
+                icon={ListChecks}
+                value={String(data?.totalExercises ?? 0)}
+                label="Total exercises"
+              />
+              <Metric
+                icon={Layers3}
+                value={String(data?.loggedSets ?? 0)}
+                label="Logged sets"
+              />
+            </View>
           </View>
         </View>
 
@@ -502,6 +531,41 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
+  desktopContent: {
+    width: '100%',
+    maxWidth: 1220,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
+  desktopHeroPlaceholder: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: '38%',
+    height: 170,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  desktopGreeting: { maxWidth: '58%' },
+  desktopHeroArea: {
+    minHeight: 190,
+    paddingTop: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  desktopWeekSection: { maxWidth: 640, marginBottom: spacing.lg },
+  desktopWeekStrip: { width: 620 },
+  desktopDayCard: { flex: 1, width: 'auto', minHeight: 105 },
+  desktopSummaryRow: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    alignItems: 'stretch',
+  },
+  desktopSummaryCard: { flex: 1, minWidth: 0, marginBottom: spacing.lg },
   heroArea: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl,
